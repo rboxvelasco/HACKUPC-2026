@@ -49,12 +49,14 @@ Swap de tipos, eliminación y adición de bays con cooling lineal.
 
 ## Resultados
 
+Coverage = bay_area / (warehouse_area − obstacle_area). Obstáculos no cuentan como área usable.
+
 | Case | Bays | Coverage | Q |
 |------|------|----------|---|
-| 0 | 16 | 64% | 2,363 |
+| 0 | 26 | 66% | 3,349 |
 | 1 | 24 | 79% | 1,340 |
-| 2 | 20 | 58% | 4,945 |
-| 3 | 44 | 59% | 4,135 |
+| 2 | 20 | 69% | 2,551 |
+| 3 | 44 | 63% | 3,328 |
 
 Tiempo total: ~28s para 4 casos.
 

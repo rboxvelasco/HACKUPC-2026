@@ -2,18 +2,28 @@
 """
 Bitmap rasterization for warehouse solutions.
 
-Produces two boolean numpy arrays at a resolution determined by the GCD of
-every coordinate in the scene (bay widths/depths/gaps, obstacle positions and
-sizes, warehouse vertices). Using the GCD guarantees every feature edge falls
-on a cell boundary — no rounding, no lost slivers.
+Produces boolean numpy arrays + a ceiling profile at a resolution determined
+by the GCD of every coordinate in the scene (bay widths/depths/gaps, obstacle
+positions and sizes, warehouse vertices, ceiling breakpoints). Using the GCD
+guarantees every feature edge falls on a cell boundary — no rounding, no lost
+slivers.
 
 Arrays use shape (rows, cols) with row 0 at y=0 (bottom), matching the
 warehouse coordinate system. Each cell spans `cell_size` millimetres.
 
-  bitmap_occupied:  True where a cell is inside an obstacle OR a placed bay body
-  bitmap_gap:       True where a cell is inside a placed bay's gap zone (body excluded)
+  bitmap_occupied:  True where a cell is inside an obstacle OR a placed bay body.
+  bitmap_gap:       True where a cell is inside a placed bay's gap zone (body excluded).
+  bitmap_inside:    True where a cell is inside the warehouse polygon.
+  ceiling_profile:  Per-column min ceiling height (mm). Used for O(1) ceiling
+                    lookups during convolutional candidate generation.
 
-Cells outside the warehouse polygon are False in both bitmaps.
+Cells outside the warehouse polygon are False in `occupied` and `gap`.
+
+Rotation convention (must match solver.py):
+  0   → body occupies [x, x+w] × [y, y+d], gap on +Y side    [y+d, y+d+g]
+  90  → body occupies [x, x+d] × [y, y+w], gap on −X side    [x-g, x]
+  180 → body occupies [x, x+w] × [y, y+d], gap on −Y side    [y-g, y]
+  270 → body occupies [x, x+d] × [y, y+w], gap on +X side    [x+w, x+w+g]
 
 Usage (CLI):
     python3 bitmap.py <case_dir> <solution_csv> [output_npz]
@@ -21,9 +31,11 @@ Usage (CLI):
 Usage (library):
     from bitmap import rasterize_solution
     result = rasterize_solution("Cases/Case0", "solutions/Case0.csv")
-    occ = result.bitmap_occupied   # shape (rows, cols), dtype=bool
-    gap = result.bitmap_gap        # shape (rows, cols), dtype=bool
-    cell = result.cell_size        # mm per cell
+    occ = result.bitmap_occupied      # shape (rows, cols), dtype=bool
+    gap = result.bitmap_gap           # shape (rows, cols), dtype=bool
+    inside = result.bitmap_inside     # shape (rows, cols), dtype=bool
+    ceil_h = result.ceiling_profile   # shape (cols,), dtype=int32
+    cell = result.cell_size           # mm per cell
 """
 
 import os
@@ -36,8 +48,10 @@ from typing import List, Tuple
 import numpy as np
 
 from solver import (
+    Ceiling,
     PlacedBay,
     parse_bay_types,
+    parse_ceiling,
     parse_obstacles,
     parse_warehouse,
 )
@@ -45,11 +59,30 @@ from solver import (
 
 @dataclass
 class RasterResult:
-    bitmap_occupied: np.ndarray  # bool, shape (rows, cols)
-    bitmap_gap: np.ndarray       # bool, shape (rows, cols)
-    cell_size: int               # mm per cell (the GCD)
-    origin: Tuple[int, int]      # (x, y) world coords of cell (0, 0), in mm
-    shape: Tuple[int, int]       # (rows, cols)
+    bitmap_occupied: np.ndarray   # bool, shape (rows, cols). Obstacles + bay bodies.
+    bitmap_gap: np.ndarray        # bool, shape (rows, cols). Bay gap zones (bodies excluded).
+    bitmap_inside: np.ndarray     # bool, shape (rows, cols). Cells inside the warehouse polygon.
+    ceiling_profile: np.ndarray   # int32, shape (cols,). Min ceiling height (mm) per column.
+    cell_size: int                # mm per cell (the GCD of all coords).
+    origin: Tuple[int, int]       # (x, y) world coords of cell (0, 0), in mm.
+    shape: Tuple[int, int]        # (rows, cols).
+
+    # ── coordinate helpers ────────────────────────────────────────────
+    # World coordinates are in millimetres. Cell coordinates are integer
+    # (row, col) indices into the bitmap arrays. Every input dimension is a
+    # multiple of cell_size by construction, so these conversions are exact.
+
+    def world_to_cell(self, x: int, y: int) -> Tuple[int, int]:
+        """World (x, y) in mm → (row, col) cell index. Floor division."""
+        col = (x - self.origin[0]) // self.cell_size
+        row = (y - self.origin[1]) // self.cell_size
+        return int(row), int(col)
+
+    def cell_to_world(self, row: int, col: int) -> Tuple[int, int]:
+        """(row, col) cell index → world (x, y) mm of the cell's bottom-left corner."""
+        x = self.origin[0] + col * self.cell_size
+        y = self.origin[1] + row * self.cell_size
+        return int(x), int(y)
 
 
 def _collect_grid_dimensions(
@@ -57,6 +90,7 @@ def _collect_grid_dimensions(
     obstacles_raw: List[Tuple[int, int, int, int]],
     bay_dims: List[Tuple[int, int, int]],  # (width, depth, gap)
     placements: List[Tuple[int, int, int, int, int]],  # (x, y, w_eff, d_eff, gap_dir_axis)
+    ceiling_breakpoints: List[Tuple[int, int]] = None,
 ) -> List[int]:
     """Collect every coordinate/dimension that must snap to the grid."""
     nums: List[int] = []
@@ -68,6 +102,11 @@ def _collect_grid_dimensions(
         nums.extend([w, d, g])
     for px, py, *_ in placements:
         nums.extend([px, py])
+    # Ceiling breakpoint X coordinates must also align, or ceiling_profile
+    # will quantize to the wrong column boundaries.
+    if ceiling_breakpoints:
+        for bx, _bh in ceiling_breakpoints:
+            nums.append(bx)
     # Drop zeros — gcd(0, n) = n so they don't affect result, but keep it tidy
     return [abs(n) for n in nums if n != 0]
 
@@ -222,6 +261,35 @@ def _fill_polygon_mask(
     return mask
 
 
+def _build_ceiling_profile(
+    ceiling: Ceiling,
+    origin_x: int,
+    cell: int,
+    cols: int,
+) -> np.ndarray:
+    """Per-column minimum ceiling height (mm), size `cols`.
+
+    `ceiling_profile[c]` is the minimum ceiling height over the world X range
+    covered by column `c`, i.e. `[origin_x + c*cell, origin_x + (c+1)*cell]`.
+
+    Because ceiling breakpoint X-coords are GCD-divisible by construction, each
+    column falls entirely within a single breakpoint interval, so this reduces
+    to `ceiling.height_at(column_center_x)`. We still use the range-min form
+    for defensive robustness in case the caller overrides `cell_size`.
+    """
+    profile = np.zeros(cols, dtype=np.int32)
+    for c in range(cols):
+        x0 = origin_x + c * cell
+        x1 = x0 + cell
+        # Sample both endpoints AND every breakpoint inside the cell, take min.
+        h_min = min(ceiling.height_at(x0), ceiling.height_at(x1 - 1))
+        for bx, bh in ceiling.breakpoints:
+            if x0 < bx < x1:
+                h_min = min(h_min, bh)
+        profile[c] = h_min
+    return profile
+
+
 def rasterize_solution(
     case_dir: str, solution_csv: str, cell_size: int = None
 ) -> RasterResult:
@@ -241,6 +309,7 @@ def rasterize_solution(
     wh_coords = _parse_warehouse_coords(os.path.join(case_dir, 'warehouse.csv'))
     obs_raw = _parse_obstacles_raw(os.path.join(case_dir, 'obstacles.csv'))
     bay_types = parse_bay_types(os.path.join(case_dir, 'types_of_bays.csv'))
+    ceiling = parse_ceiling(os.path.join(case_dir, 'ceiling.csv'))
     bay_type_map = {bt.id: bt for bt in bay_types}
 
     placements = _load_placements(solution_csv, bay_type_map)
@@ -251,7 +320,10 @@ def rasterize_solution(
         placement_tuples = [
             (int(pb.x), int(pb.y), 0, 0, 0) for pb in placements
         ]
-        nums = _collect_grid_dimensions(wh_coords, obs_raw, bay_dims, placement_tuples)
+        nums = _collect_grid_dimensions(
+            wh_coords, obs_raw, bay_dims, placement_tuples,
+            ceiling_breakpoints=ceiling.breakpoints,
+        )
         cell_size = _compute_cell_size(nums)
 
     # Grid extent is taken from warehouse bounding box
@@ -286,9 +358,14 @@ def rasterize_solution(
     # keep it flagged as occupied, not as gap.
     gap &= ~occupied
 
+    # Ceiling profile: one value per column, covering the warehouse bbox X span.
+    ceiling_profile = _build_ceiling_profile(ceiling, origin_x, cell_size, cols)
+
     return RasterResult(
         bitmap_occupied=occupied,
         bitmap_gap=gap,
+        bitmap_inside=inside,
+        ceiling_profile=ceiling_profile,
         cell_size=cell_size,
         origin=(origin_x, origin_y),
         shape=(rows, cols),
@@ -299,12 +376,16 @@ def _print_summary(result: RasterResult) -> None:
     rows, cols = result.shape
     occ = result.bitmap_occupied
     gap = result.bitmap_gap
+    inside = result.bitmap_inside
+    profile = result.ceiling_profile
     total = rows * cols
     print(f"  cell_size = {result.cell_size} mm")
     print(f"  shape     = {rows} rows × {cols} cols ({total:,} cells)")
     print(f"  origin    = {result.origin} mm")
+    print(f"  inside    = {int(inside.sum()):>8,} cells ({100*inside.mean():.1f}%)")
     print(f"  occupied  = {int(occ.sum()):>8,} cells ({100*occ.mean():.1f}%)")
     print(f"  gap       = {int(gap.sum()):>8,} cells ({100*gap.mean():.1f}%)")
+    print(f"  ceiling   = min={int(profile.min())} max={int(profile.max())} mm")
 
 
 if __name__ == '__main__':
@@ -324,6 +405,8 @@ if __name__ == '__main__':
             out_path,
             occupied=result.bitmap_occupied,
             gap=result.bitmap_gap,
+            inside=result.bitmap_inside,
+            ceiling_profile=result.ceiling_profile,
             cell_size=np.array(result.cell_size),
             origin=np.array(result.origin),
         )

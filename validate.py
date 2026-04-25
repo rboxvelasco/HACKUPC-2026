@@ -10,7 +10,7 @@ from shapely.geometry import Polygon, box
 
 from solver import (
     parse_warehouse, parse_obstacles, parse_ceiling, parse_bay_types,
-    PlacedBay, compute_score,
+    PlacedBay, compute_score, usable_area,
 )
 
 
@@ -21,7 +21,7 @@ def validate(case_dir: str, solution_file: str) -> bool:
     bay_types = parse_bay_types(os.path.join(case_dir, 'types_of_bays.csv'))
 
     bay_type_map = {bt.id: bt for bt in bay_types}
-    warehouse_area = warehouse.area
+    usable_area_val = usable_area(warehouse, obstacles)
 
     # Parse solution
     placed = []
@@ -104,9 +104,9 @@ def validate(case_dir: str, solution_file: str) -> bool:
                 errors += 1
 
     if errors == 0:
-        score = compute_score(placed, warehouse_area)
+        score = compute_score(placed, usable_area_val)
         total_area = sum(pb.bay_type.area for pb in placed)
-        coverage = total_area / warehouse_area
+        coverage = total_area / usable_area_val if usable_area_val > 0 else 0
         print(f"  VALID! {len(placed)} bays, coverage={coverage:.1%}, Q={score:.2f}")
         return True
     else:

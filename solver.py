@@ -181,18 +181,39 @@ def parse_bay_types(filepath: str) -> List[BayType]:
 # Score
 # ─────────────────────────────────────────────
 
-def compute_score(placed_bays: List[PlacedBay], warehouse_area: float) -> float:
+def compute_score(placed_bays: List[PlacedBay], usable_area: float) -> float:
+    """Q = (total_price / total_loads) ^ (2 - coverage)
+
+    `usable_area` is the warehouse polygon area minus the obstacles' area —
+    i.e. the area a bay is actually allowed to occupy. Using raw warehouse
+    area here would understate coverage and inflate Q because the exponent
+    (2 − coverage) would be larger.
+    """
     if not placed_bays:
         return float('inf')
     total_price = sum(b.bay_type.price for b in placed_bays)
     total_loads = sum(b.bay_type.n_loads for b in placed_bays)
     total_bay_area = sum(b.bay_type.area for b in placed_bays)
-    coverage = total_bay_area / warehouse_area
+    coverage = total_bay_area / usable_area if usable_area > 0 else 0.0
     if total_loads <= 0:
         return float('inf')
     base = total_price / total_loads
     exponent = 2.0 - coverage
     return base ** exponent
+
+
+def usable_area(warehouse: Polygon, obstacles: List[Polygon]) -> float:
+    """Warehouse polygon area minus the total area of all obstacles.
+
+    Obstacles are forbidden to bays (constraint 6 of the problem brief), so
+    they do not count as usable. This is the denominator used throughout the
+    codebase for coverage and the Q-score.
+    """
+    if not obstacles:
+        return warehouse.area
+    # Obstacles are always axis-aligned rectangles fully inside the warehouse.
+    # A simple sum of their areas is correct and avoids a shapely union op.
+    return warehouse.area - sum(o.area for o in obstacles)
 
 
 # ─────────────────────────────────────────────
@@ -260,8 +281,8 @@ class CollisionEngine:
         self.bodies.pop(idx)
         self.bodies_gap.pop(idx)
 
-    def score(self, warehouse_area: float) -> float:
-        return compute_score(self.placed_bays, warehouse_area)
+    def score(self, usable_area_val: float) -> float:
+        return compute_score(self.placed_bays, usable_area_val)
 
 
 # ─────────────────────────────────────────────
@@ -549,7 +570,7 @@ def strip_pack(
     warehouse: Polygon,
     obstacles: List[Polygon],
     ceiling: Ceiling,
-    warehouse_area: float,
+    usable_area_val: float,
     time_limit: float,
     verbose: bool = False,
 ) -> None:
@@ -684,7 +705,7 @@ def strip_pack(
                     )
 
             # Evaluate
-            temp_score = temp_engine.score(warehouse_area)
+            temp_score = temp_engine.score(usable_area_val)
             improved = temp_score < best_score
             if improved:
                 best_score = temp_score
@@ -718,7 +739,7 @@ def fill_gaps(
     bay_types: List[BayType],
     engine: CollisionEngine,
     warehouse: Polygon,
-    warehouse_area: float,
+    usable_area_val: float,
     time_limit: float,
     verbose: bool = False,
 ) -> None:
@@ -728,7 +749,7 @@ def fill_gaps(
     sorted_types = sorted(bay_types, key=lambda b: b.efficiency, reverse=True)
     rotations = [0, 180, 90, 270]
 
-    current_score = engine.score(warehouse_area)
+    current_score = engine.score(usable_area_val)
     pass_idx = 0
 
     while time.time() - start_time < time_limit:
@@ -774,7 +795,7 @@ def fill_gaps(
                     c = PlacedBay(bay_type=bt, x=x, y=y, rotation=rot)
                     if engine.can_place(c):
                         test_bays = engine.placed_bays + [c]
-                        test_score = compute_score(test_bays, warehouse_area)
+                        test_score = compute_score(test_bays, usable_area_val)
                         if test_score < current_score:
                             engine.place(c)
                             current_score = test_score
@@ -819,8 +840,11 @@ def solve(case_dir: str, output_file: str):
     bay_types = parse_bay_types(os.path.join(case_dir, 'types_of_bays.csv'))
 
     warehouse_area = warehouse.area
-    print(f"    Area={warehouse_area:.0f}  Obstacles={len(obstacles)}  "
-          f"BayTypes={len(bay_types)}  CeilingBPs={len(ceiling.breakpoints)}")
+    usable_area_val = usable_area(warehouse, obstacles)
+    obstacle_area = warehouse_area - usable_area_val
+    print(f"    WH={warehouse_area:.0f}  Obs={obstacle_area:.0f}  "
+          f"Usable={usable_area_val:.0f}  BayTypes={len(bay_types)}  "
+          f"CeilingBPs={len(ceiling.breakpoints)}")
 
     for bt in bay_types:
         print(f"    Bay {bt.id}: {bt.width}x{bt.depth} h={bt.height} gap={bt.gap} "
@@ -834,11 +858,11 @@ def solve(case_dir: str, output_file: str):
     # Phase A: Strip packing
     strip_budget = remaining * 0.6
     print(f"[2] Strip packing ({strip_budget:.1f}s)...")
-    strip_pack(bay_types, engine, warehouse, obstacles, ceiling, warehouse_area, strip_budget, verbose=False)
+    strip_pack(bay_types, engine, warehouse, obstacles, ceiling, usable_area_val, strip_budget, verbose=False)
 
-    score = engine.score(warehouse_area)
+    score = engine.score(usable_area_val)
     area = sum(pb.bay_type.area for pb in engine.placed_bays)
-    cov = area / warehouse_area if warehouse_area > 0 else 0
+    cov = area / usable_area_val if usable_area_val > 0 else 0
     print(f"    → {len(engine.placed_bays)} bays, cov={cov:.1%}, Q={score:.2f}")
 
     # Phase B: Fill gaps — capped at 1.5s. Data shows productive improvements
@@ -848,10 +872,10 @@ def solve(case_dir: str, output_file: str):
     fill_budget = min(7.0 - elapsed - 0.2, 1.5)
     if fill_budget > 0.3:
         print(f"[3] Filling gaps ({fill_budget:.1f}s)...")
-        fill_gaps(bay_types, engine, warehouse, warehouse_area, fill_budget, verbose=False)
-        score = engine.score(warehouse_area)
+        fill_gaps(bay_types, engine, warehouse, usable_area_val, fill_budget, verbose=False)
+        score = engine.score(usable_area_val)
         area = sum(pb.bay_type.area for pb in engine.placed_bays)
-        cov = area / warehouse_area
+        cov = area / usable_area_val
         print(f"    → {len(engine.placed_bays)} bays, cov={cov:.1%}, Q={score:.2f}")
 
     write_output(engine.placed_bays, output_file)
