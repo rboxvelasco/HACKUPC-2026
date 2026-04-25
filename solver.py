@@ -366,61 +366,84 @@ def pack_row(
     depth: int, max_height: int, rotation: int,
     bay_types: List[BayType],
     engine: CollisionEngine,
+    ceiling: Ceiling = None,
 ) -> List[PlacedBay]:
     """
     Pack bays left-to-right in a horizontal strip.
-    Uses a 1D bin-packing approach: try to fill the width with the best combo.
+    Uses ceiling-aware type selection: picks the best bay type for each
+    X segment based on the local ceiling height.
+    Uses a 1D knapsack-like approach to maximize width utilization.
     """
     available_width = x_end - x_start
+    if available_width < 1:
+        return []
 
-    # Filter bay types that fit this strip
+    # Build candidates: (bay_type, rotation, effective_width) that match this depth
     candidates = []
     for bt in bay_types:
-        if bt.height > max_height:
-            continue
-        # Check which orientations give us the right depth
-        if bt.depth == depth and bt.width <= available_width:
-            # rotation 0 or 180: width along X, depth along Y
-            candidates.append((bt, rotation))  # 0 or 180
-        if bt.width == depth and bt.depth <= available_width:
-            # rotation 90 or 270: depth along X, width along Y
+        # rotation 0 or 180: width along X, depth along Y
+        if bt.depth == depth:
+            candidates.append((bt, rotation, bt.width))
+        # rotation 90 or 270: depth along X, width along Y
+        if bt.width == depth:
             rot_alt = 90 if rotation == 0 else 270 if rotation == 180 else 90
-            candidates.append((bt, rot_alt))
+            candidates.append((bt, rot_alt, bt.depth))
 
     if not candidates:
         return []
-
-    # Sort by efficiency (best first)
-    candidates.sort(key=lambda c: c[0].efficiency, reverse=True)
 
     placed = []
     x = x_start
 
     while x < x_end - 1:
+        # Get local ceiling height at current X position
         best = None
-        for bt, rot in candidates:
-            c = PlacedBay(bay_type=bt, x=x, y=y, rotation=rot)
-            w, d = c.get_body_dims()
-            if x + w > x_end + 0.5:
+        best_score_val = -1
+
+        for bt, rot, ew in candidates:
+            if x + ew > x_end + 0.5:
                 continue
-            if engine.can_place(c):
+
+            # Check ceiling for this specific bay at this X
+            if ceiling is not None:
+                local_ceil = ceiling.min_height_in_range(x, x + ew)
+                if bt.height > local_ceil:
+                    continue
+            elif bt.height > max_height:
+                continue
+
+            c = PlacedBay(bay_type=bt, x=x, y=y, rotation=rot)
+            if not engine.can_place(c):
+                continue
+
+            # Score: prefer bays that maximize area * loads / price
+            # But also prefer wider bays to reduce wasted space
+            score_val = bt.efficiency * (ew / available_width)
+            if score_val > best_score_val:
+                best_score_val = score_val
                 best = c
-                break
 
         if best is None:
-            # Try smaller bays
-            found = False
-            for bt, rot in reversed(candidates):
-                c = PlacedBay(bay_type=bt, x=x, y=y, rotation=rot)
-                w, d = c.get_body_dims()
-                if x + w > x_end + 0.5:
+            # Try any bay that fits, smallest first (fill remaining space)
+            for bt, rot, ew in sorted(candidates, key=lambda c: c[2]):
+                if x + ew > x_end + 0.5:
                     continue
+                if ceiling is not None:
+                    local_ceil = ceiling.min_height_in_range(x, x + ew)
+                    if bt.height > local_ceil:
+                        continue
+                elif bt.height > max_height:
+                    continue
+                c = PlacedBay(bay_type=bt, x=x, y=y, rotation=rot)
                 if engine.can_place(c):
                     best = c
-                    found = True
                     break
-            if not found:
-                break
+
+        if best is None:
+            # Skip this position and try next aligned position
+            min_w = min(ew for _, _, ew in candidates)
+            x += min_w
+            continue
 
         engine.place(best)
         placed.append(best)
@@ -571,7 +594,15 @@ def strip_pack(
     best_engine_state = None
     best_score = float('inf')
 
-    for depth in sorted(depth_groups.keys(), reverse=True):
+    # Sort depths: try the most common depth first (most bay types use it)
+    depth_popularity = {}
+    for bt in bay_types:
+        for d in [bt.depth, bt.width]:
+            depth_popularity[d] = depth_popularity.get(d, 0) + bt.efficiency
+
+    sorted_depths = sorted(depth_groups.keys(), key=lambda d: depth_popularity.get(d, 0), reverse=True)
+
+    for depth in sorted_depths:
         if time.time() - start_time > time_limit * 0.7:
             break
 
@@ -582,9 +613,11 @@ def strip_pack(
         if not usable_bays:
             continue
 
-        # Try both alternation patterns
-        for positions_fn in [compute_row_positions, compute_row_positions_reverse]:
-            if time.time() - start_time > time_limit * 0.8:
+        # Try multiple start patterns
+        position_fns = [compute_row_positions, compute_row_positions_reverse]
+
+        for positions_fn in position_fns:
+            if time.time() - start_time > time_limit * 0.85:
                 break
 
             # Create a temporary engine
@@ -622,7 +655,7 @@ def strip_pack(
 
                     pack_row(
                         gminx, gmaxx, y_pos, depth, max_h, rot,
-                        usable_bays, temp_engine,
+                        usable_bays, temp_engine, ceiling,
                     )
 
             # Evaluate
@@ -666,9 +699,9 @@ def fill_gaps(
 
         # Generate candidate positions from edges of placed bays
         candidate_positions = set()
-        for pb in engine.placed_bays:
-            body = engine.bodies[engine.placed_bays.index(pb)]
-            body_gap = engine.bodies_gap[engine.placed_bays.index(pb)]
+        for i, pb in enumerate(engine.placed_bays):
+            body = engine.bodies[i]
+            body_gap = engine.bodies_gap[i]
             for poly in [body, body_gap]:
                 bminx, bminy, bmaxx, bmaxy = poly.bounds
                 for bt in bay_types:
