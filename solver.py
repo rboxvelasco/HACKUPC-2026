@@ -9,8 +9,6 @@ Usage: python3 solver.py <case_directory> [output_file]
 import sys
 import os
 import time
-import math
-import random
 from dataclasses import dataclass
 from typing import List, Tuple, Optional, Dict, Set
 from functools import reduce
@@ -553,6 +551,7 @@ def strip_pack(
     ceiling: Ceiling,
     warehouse_area: float,
     time_limit: float,
+    verbose: bool = False,
 ) -> None:
     """
     Main packing strategy:
@@ -602,9 +601,31 @@ def strip_pack(
 
     sorted_depths = sorted(depth_groups.keys(), key=lambda d: depth_popularity.get(d, 0), reverse=True)
 
-    for depth in sorted_depths:
-        if time.time() - start_time > time_limit * 0.7:
+    # Budget strategy: the first depth (most popular) gets the lion's share.
+    # Empirically, the first depth wins on every observed case. Remaining depths
+    # share a small fraction as insurance against edge cases where another depth
+    # would have done better.
+    first_depth_budget = time_limit * 0.5
+    remaining_depths_budget = time_limit * 0.3  # total across all remaining depths
+    per_remaining_depth_budget = (
+        remaining_depths_budget / max(1, len(sorted_depths) - 1)
+        if len(sorted_depths) > 1 else 0.0
+    )
+
+    for depth_idx, depth in enumerate(sorted_depths):
+        # Hard cap: never exceed overall time limit
+        if time.time() - start_time > time_limit * 0.9:
             break
+
+        # Per-depth soft budget
+        depth_start = time.time()
+        if depth_idx == 0:
+            depth_budget = first_depth_budget
+        else:
+            # If the first depth already found something good, keep others tight
+            depth_budget = per_remaining_depth_budget
+            if time.time() - depth_start > depth_budget:
+                continue
 
         gap = gap_by_depth[depth]
 
@@ -617,7 +638,11 @@ def strip_pack(
         position_fns = [compute_row_positions, compute_row_positions_reverse]
 
         for positions_fn in position_fns:
-            if time.time() - start_time > time_limit * 0.85:
+            # Per-depth budget check: stop exploring this depth if we've exceeded it
+            if time.time() - depth_start > depth_budget:
+                break
+            # Global hard cap
+            if time.time() - start_time > time_limit * 0.9:
                 break
 
             # Create a temporary engine
@@ -660,13 +685,23 @@ def strip_pack(
 
             # Evaluate
             temp_score = temp_engine.score(warehouse_area)
-            if temp_score < best_score:
+            improved = temp_score < best_score
+            if improved:
                 best_score = temp_score
                 best_engine_state = (
                     list(temp_engine.placed_bays),
                     list(temp_engine.bodies),
                     list(temp_engine.bodies_gap),
                 )
+
+            if verbose:
+                orient = 'fwd' if positions_fn is compute_row_positions else 'rev'
+                elapsed = time.time() - start_time
+                n_bays = len(temp_engine.placed_bays)
+                marker = '★' if improved else ' '
+                print(f"    [strip] depth={depth:>5} {orient} "
+                      f"bays={n_bays:>3} Q={temp_score:>10.2f} "
+                      f"best={best_score:>10.2f} t={elapsed:>5.2f}s {marker}")
 
     # Apply best result
     if best_engine_state:
@@ -685,6 +720,7 @@ def fill_gaps(
     warehouse: Polygon,
     warehouse_area: float,
     time_limit: float,
+    verbose: bool = False,
 ) -> None:
     """Fill remaining gaps using positions derived from placed bay edges."""
     start_time = time.time()
@@ -693,8 +729,12 @@ def fill_gaps(
     rotations = [0, 180, 90, 270]
 
     current_score = engine.score(warehouse_area)
+    pass_idx = 0
 
     while time.time() - start_time < time_limit:
+        pass_idx += 1
+        pass_start = time.time()
+        score_before_pass = current_score
         placed_this_pass = 0
 
         # Generate candidate positions from edges of placed bays
@@ -744,150 +784,15 @@ def fill_gaps(
                 if placed:
                     break
 
+        if verbose:
+            pass_time = time.time() - pass_start
+            elapsed = time.time() - start_time
+            print(f"    [fill]  pass={pass_idx} added={placed_this_pass} "
+                  f"Q={current_score:>10.2f} (Δ={score_before_pass - current_score:>+9.2f}) "
+                  f"pass_t={pass_time:>5.2f}s t={elapsed:>5.2f}s")
+
         if placed_this_pass == 0:
             break
-
-
-# ─────────────────────────────────────────────
-# Simulated Annealing (Phase B)
-# ─────────────────────────────────────────────
-
-def simulated_annealing(
-    bay_types: List[BayType],
-    engine: CollisionEngine,
-    warehouse: Polygon,
-    warehouse_area: float,
-    time_limit: float,
-) -> None:
-    """
-    SA with moves: swap type, remove bay, add bay at edge position.
-    """
-    start_time = time.time()
-    if not engine.placed_bays:
-        return
-
-    current_score = engine.score(warehouse_area)
-    best_score = current_score
-    best_state = (
-        list(engine.placed_bays),
-        list(engine.bodies),
-        list(engine.bodies_gap),
-    )
-
-    rotations = [0, 90, 180, 270]
-    T0 = current_score * 0.1  # Initial temperature
-    iterations = 0
-
-    while time.time() - start_time < time_limit:
-        iterations += 1
-        elapsed_frac = (time.time() - start_time) / time_limit
-        T = T0 * (1.0 - elapsed_frac)  # Linear cooling
-        if T <= 0:
-            T = 0.01
-
-        n = len(engine.placed_bays)
-        move = random.random()
-
-        if move < 0.5 and n > 0:
-            # Swap type at random position
-            idx = random.randint(0, n - 1)
-            old_bay = engine.placed_bays[idx]
-            bt = random.choice(bay_types)
-            rot = random.choice(rotations)
-            candidate = PlacedBay(bay_type=bt, x=old_bay.x, y=old_bay.y, rotation=rot)
-
-            if engine.can_place(candidate, ignore=idx):
-                old_saved = (engine.placed_bays[idx], engine.bodies[idx], engine.bodies_gap[idx])
-                engine.replace(idx, candidate)
-                new_score = engine.score(warehouse_area)
-                delta = new_score - current_score
-
-                if delta < 0 or random.random() < math.exp(-delta / T):
-                    current_score = new_score
-                    if new_score < best_score:
-                        best_score = new_score
-                        best_state = (
-                            list(engine.placed_bays),
-                            list(engine.bodies),
-                            list(engine.bodies_gap),
-                        )
-                else:
-                    # Revert
-                    engine.placed_bays[idx] = old_saved[0]
-                    engine.bodies[idx] = old_saved[1]
-                    engine.bodies_gap[idx] = old_saved[2]
-
-        elif move < 0.7 and n > 1:
-            # Remove a random bay
-            idx = random.randint(0, n - 1)
-            old_saved = (engine.placed_bays[idx], engine.bodies[idx], engine.bodies_gap[idx])
-            engine.remove(idx)
-            new_score = engine.score(warehouse_area)
-            delta = new_score - current_score
-
-            if delta < 0 or random.random() < math.exp(-delta / T):
-                current_score = new_score
-                if new_score < best_score:
-                    best_score = new_score
-                    best_state = (
-                        list(engine.placed_bays),
-                        list(engine.bodies),
-                        list(engine.bodies_gap),
-                    )
-            else:
-                # Revert
-                engine.placed_bays.insert(idx, old_saved[0])
-                engine.bodies.insert(idx, old_saved[1])
-                engine.bodies_gap.insert(idx, old_saved[2])
-
-        else:
-            # Try to add a bay at a random edge position
-            if n > 0:
-                ref_idx = random.randint(0, n - 1)
-                ref = engine.placed_bays[ref_idx]
-                ref_body = engine.bodies[ref_idx]
-                bminx, bminy, bmaxx, bmaxy = ref_body.bounds
-
-                bt = random.choice(bay_types)
-                rot = random.choice(rotations)
-                w, d = bt.width, bt.depth
-                if rot in (90, 270):
-                    w, d = d, w
-
-                # Try positions adjacent to the reference bay
-                positions = [
-                    (bmaxx, bminy), (bminx - w, bminy),
-                    (bminx, bmaxy), (bminx, bminy - d),
-                    (bmaxx, bmaxy), (bmaxx, bminy - d),
-                    (bminx - w, bmaxy), (bminx - w, bminy - d),
-                ]
-                random.shuffle(positions)
-
-                for px, py in positions:
-                    candidate = PlacedBay(bay_type=bt, x=px, y=py, rotation=rot)
-                    if engine.can_place(candidate):
-                        engine.place(candidate)
-                        new_score = engine.score(warehouse_area)
-                        delta = new_score - current_score
-
-                        if delta < 0 or random.random() < math.exp(-delta / T):
-                            current_score = new_score
-                            if new_score < best_score:
-                                best_score = new_score
-                                best_state = (
-                                    list(engine.placed_bays),
-                                    list(engine.bodies),
-                                    list(engine.bodies_gap),
-                                )
-                            break
-                        else:
-                            engine.remove(len(engine.placed_bays) - 1)
-                            break
-
-    # Restore best state
-    engine.placed_bays = best_state[0]
-    engine.bodies = best_state[1]
-    engine.bodies_gap = best_state[2]
 
 
 # ─────────────────────────────────────────────
@@ -927,32 +832,23 @@ def solve(case_dir: str, output_file: str):
     remaining = 7.0 - parse_time
 
     # Phase A: Strip packing
-    strip_budget = remaining * 0.45
+    strip_budget = remaining * 0.6
     print(f"[2] Strip packing ({strip_budget:.1f}s)...")
-    strip_pack(bay_types, engine, warehouse, obstacles, ceiling, warehouse_area, strip_budget)
+    strip_pack(bay_types, engine, warehouse, obstacles, ceiling, warehouse_area, strip_budget, verbose=False)
 
     score = engine.score(warehouse_area)
     area = sum(pb.bay_type.area for pb in engine.placed_bays)
     cov = area / warehouse_area if warehouse_area > 0 else 0
     print(f"    → {len(engine.placed_bays)} bays, cov={cov:.1%}, Q={score:.2f}")
 
-    # Fill gaps
+    # Phase B: Fill gaps — capped at 1.5s. Data shows productive improvements
+    # always happen in the first pass or two; longer runs mostly burn time
+    # proving "nothing left to add" on large warehouses.
     elapsed = time.time() - total_start
-    fill_budget = min((7.0 - elapsed) * 0.4, 2.0)
+    fill_budget = min(7.0 - elapsed - 0.2, 1.5)
     if fill_budget > 0.3:
         print(f"[3] Filling gaps ({fill_budget:.1f}s)...")
-        fill_gaps(bay_types, engine, warehouse, warehouse_area, fill_budget)
-        score = engine.score(warehouse_area)
-        area = sum(pb.bay_type.area for pb in engine.placed_bays)
-        cov = area / warehouse_area
-        print(f"    → {len(engine.placed_bays)} bays, cov={cov:.1%}, Q={score:.2f}")
-
-    # Phase B: Simulated Annealing
-    elapsed = time.time() - total_start
-    sa_budget = 7.0 - elapsed
-    if sa_budget > 0.5:
-        print(f"[4] Simulated annealing ({sa_budget:.1f}s)...")
-        simulated_annealing(bay_types, engine, warehouse, warehouse_area, sa_budget)
+        fill_gaps(bay_types, engine, warehouse, warehouse_area, fill_budget, verbose=False)
         score = engine.score(warehouse_area)
         area = sum(pb.bay_type.area for pb in engine.placed_bays)
         cov = area / warehouse_area
