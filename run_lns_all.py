@@ -20,7 +20,7 @@ from lns_sa import _load_solution
 
 CASES_DIR = 'Cases'
 SOLUTIONS_DIR = 'solutions'
-TIME_LIMIT = 3.0  # seconds per case
+TIME_LIMIT = 25.0  # seconds per case
 
 
 def main():

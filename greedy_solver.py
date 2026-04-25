@@ -3,17 +3,22 @@
 Warehouse Bay Optimizer — Simple Multi-Criteria Greedy
 HackUPC 2026 — Mecalux Challenge
 
-A deliberately simple, deterministic solver:
-  1. For each candidate row-depth in the catalog
-  2. For each alternating-gap starting rotation (gap-up-first vs gap-down-first)
-  3. For each greedy scoring criterion (6 variants)
-  4. For each axis orientation (horizontal strips vs vertical strips)
-     → do one left-to-right strip-packing pass
-  Then run a deterministic anchor-based gap-filler on the best result.
-  Pick the combination with the lowest Q.
+A deliberately simple, deterministic solver with two complementary paths:
 
-No SA, no LNS, no bitmaps. Just a small search matrix of greedy variants
-and a gap-filler.
+1. Whole-warehouse pass:
+   For each candidate (row-depth × start-rotation × greedy-criterion ×
+   horizontal/vertical orientation), do one left-to-right strip-pack with
+   alternating-gap rows. Keep the combination with lowest Q.
+   Then run an anchor-based gap-filler.
+
+2. Region decomposition pass:
+   Slice the warehouse (minus obstacles) into maximal axis-aligned
+   rectangles. Pack each region independently with its own best
+   orientation. Run the anchor-based gap-filler.
+
+Return whichever pass produced the lower Q.
+
+No simulated annealing. No bitmaps. No local search. Deterministic.
 
 Usage: python3 greedy_solver.py <case_directory> [output_file]
 """
@@ -21,7 +26,7 @@ Usage: python3 greedy_solver.py <case_directory> [output_file]
 import sys
 import os
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Tuple, Optional, Callable
 
 from shapely.geometry import Polygon, box
@@ -665,11 +670,33 @@ def main():
     print(f"    WH={wh_area:.0f}  Obs={wh_area-ua:.0f}  Usable={ua:.0f}  "
           f"BayTypes={len(bay_types)}  CeilingBPs={len(ceiling.breakpoints)}")
 
-    print(f"[2] Multi-criteria greedy search...")
-    placed, results = solve_one_case(
+    print(f"[2] Multi-criteria greedy search (whole-warehouse)...")
+    placed_whole, _ = solve_one_case(
         warehouse, obstacles, ceiling, bay_types,
-        time_limit=8.0, verbose=verbose,
+        time_limit=4.0, verbose=verbose,
     )
+    q_whole = compute_score(placed_whole, ua)
+    cov_whole = sum(p.bay_type.area for p in placed_whole) / ua if ua > 0 else 0
+    print(f"    whole: {len(placed_whole)} bays, cov={cov_whole:.1%}, Q={q_whole:.2f}")
+
+    print(f"[3] Region decomposition search...")
+    placed_regional, rects = solve_one_case_regional(
+        warehouse, obstacles, ceiling, bay_types,
+        time_limit=4.0, verbose=verbose,
+    )
+    q_regional = compute_score(placed_regional, ua) if placed_regional else float('inf')
+    cov_regional = (sum(p.bay_type.area for p in placed_regional) / ua
+                    if ua > 0 and placed_regional else 0)
+    print(f"    regional: {len(placed_regional)} bays in {len(rects)} region(s), "
+          f"cov={cov_regional:.1%}, Q={q_regional:.2f}")
+
+    # Pick the better of the two
+    if q_regional < q_whole:
+        placed = placed_regional
+        winner = 'regional'
+    else:
+        placed = placed_whole
+        winner = 'whole'
 
     write_output(placed, output_file)
 
@@ -679,9 +706,387 @@ def main():
 
     print(f"\n{'='*60}")
     print(f"  {output_file}: {len(placed)} bays, "
-          f"cov={coverage:.1%}, Q={final_score:.2f}, {total_time:.2f}s")
-    print(f"  Tried {len(results)} greedy combinations")
+          f"cov={coverage:.1%}, Q={final_score:.2f}, {total_time:.2f}s "
+          f"[winner: {winner}]")
     print(f"{'='*60}")
+
+
+# ─────────────────────────────────────────────
+# Region decomposition — rectilinear polygon → axis-aligned rectangles
+# ─────────────────────────────────────────────
+
+def decompose_into_rectangles(
+    warehouse: Polygon,
+    obstacles: List[Polygon],
+) -> List[Tuple[float, float, float, float]]:
+    """Decompose the warehouse (minus obstacles) into axis-aligned rectangles.
+
+    Algorithm: take all unique X and Y coordinates from warehouse vertices
+    and obstacle corners. These create a grid of cells. Each cell is either
+    entirely inside the usable region or entirely outside. Then merge
+    adjacent inside-cells into maximal rectangles via a greedy row-sweep.
+
+    This produces at most O(n·m) rectangles (n=unique X, m=unique Y). For
+    our 4 cases, this yields 1-5 rectangles per warehouse.
+
+    Returns: list of (x0, y0, x1, y1) tuples.
+    """
+    # Collect all unique X and Y coordinates from warehouse and obstacles
+    xs = set()
+    ys = set()
+    for (px, py) in warehouse.exterior.coords:
+        xs.add(px)
+        ys.add(py)
+    for obs in obstacles:
+        x0, y0, x1, y1 = obs.bounds
+        xs.add(x0); xs.add(x1); ys.add(y0); ys.add(y1)
+
+    xs_sorted = sorted(xs)
+    ys_sorted = sorted(ys)
+
+    # Classify each cell: inside usable region (inside warehouse, outside obstacles)?
+    # We use the cell's centroid for an unambiguous point-in-polygon test.
+    warehouse_prep = prep(warehouse)
+
+    def cell_usable(x0: float, y0: float, x1: float, y1: float) -> bool:
+        cx = (x0 + x1) / 2
+        cy = (y0 + y1) / 2
+        from shapely.geometry import Point
+        pt = Point(cx, cy)
+        if not warehouse_prep.contains(pt):
+            return False
+        for obs in obstacles:
+            if obs.contains(pt):
+                return False
+        return True
+
+    n_cols = len(xs_sorted) - 1
+    n_rows = len(ys_sorted) - 1
+    # grid[row][col] = True if cell is usable
+    grid: List[List[bool]] = []
+    for r in range(n_rows):
+        row = []
+        for c in range(n_cols):
+            x0, x1 = xs_sorted[c], xs_sorted[c + 1]
+            y0, y1 = ys_sorted[r], ys_sorted[r + 1]
+            # Skip degenerate cells
+            if x1 - x0 < 1 or y1 - y0 < 1:
+                row.append(False)
+            else:
+                row.append(cell_usable(x0, y0, x1, y1))
+        grid.append(row)
+
+    # Greedy rectangle extraction: for each row, find contiguous True runs,
+    # then try to extend downward while the columns stay True.
+    rectangles: List[Tuple[float, float, float, float]] = []
+    used = [[False] * n_cols for _ in range(n_rows)]
+
+    for r in range(n_rows):
+        c = 0
+        while c < n_cols:
+            if not grid[r][c] or used[r][c]:
+                c += 1
+                continue
+            # Extend horizontally first
+            c_end = c
+            while c_end < n_cols and grid[r][c_end] and not used[r][c_end]:
+                c_end += 1
+            # Extend downward while ALL columns in [c, c_end) remain True
+            r_end = r + 1
+            while r_end < n_rows:
+                if all(grid[r_end][cc] and not used[r_end][cc]
+                       for cc in range(c, c_end)):
+                    r_end += 1
+                else:
+                    break
+            # Mark these cells as used
+            for rr in range(r, r_end):
+                for cc in range(c, c_end):
+                    used[rr][cc] = True
+            # Record rectangle in world coords
+            x0 = xs_sorted[c]
+            x1 = xs_sorted[c_end]
+            y0 = ys_sorted[r]
+            y1 = ys_sorted[r_end]
+            rectangles.append((x0, y0, x1, y1))
+            c = c_end
+
+    return rectangles
+
+
+# ─────────────────────────────────────────────
+# Per-region greedy pack
+# ─────────────────────────────────────────────
+
+def _pack_region(
+    region: Tuple[float, float, float, float],
+    bay_types: List[BayType],
+    ceiling: Ceiling,
+    existing_engine: FastCollisionEngine,
+    placed_so_far: List[PlacedBay],
+    time_budget: float,
+) -> List[PlacedBay]:
+    """Pack one rectangular region, treating already-placed bays and their
+    gaps as obstacles. Try both orientations and pick the one with better
+    per-region coverage × price/loads efficiency.
+    """
+    rx0, ry0, rx1, ry1 = region
+    r_width = rx1 - rx0
+    r_height = ry1 - ry0
+    if r_width < 500 or r_height < 500:
+        return []
+
+    # Build a synthetic warehouse for this region: the rectangle
+    # Obstacles inside the region: any obstacle that overlaps + gap zones of
+    # already-placed bays (we model bodies as hard obstacles; gaps we treat
+    # as obstacles too because they occupy space that new bays can't take).
+    region_poly = box(rx0, ry0, rx1, ry1)
+
+    synthetic_obstacles: List[Polygon] = []
+    for obs in existing_engine.obstacles:
+        if obs.intersects(region_poly) and not obs.touches(region_poly):
+            synthetic_obstacles.append(obs.intersection(region_poly))
+
+    # Add already-placed bay bodies and gaps as obstacles
+    for pb in placed_so_far:
+        body = pb.get_body_polygon()
+        gap = pb.get_body_with_gap_polygon()
+        if body.intersects(region_poly) and not body.touches(region_poly):
+            synthetic_obstacles.append(body.intersection(region_poly))
+        # gap is trickier: other bays' gaps can overlap, but NEW bay bodies
+        # can't be in another bay's gap. For simplicity, treat the gap as
+        # a no-go for new bay bodies. We're a bit conservative — may miss
+        # valid placements where a new bay's own gap would share with this
+        # gap — but that's rare and easy to recover with the post-fill step.
+        if gap.intersects(region_poly) and not gap.touches(region_poly):
+            gap_in_region = gap.intersection(region_poly)
+            if not gap_in_region.is_empty:
+                synthetic_obstacles.append(gap_in_region)
+
+    # Flatten MultiPolygons to Polygons
+    flat_obs: List[Polygon] = []
+    for so in synthetic_obstacles:
+        if so.is_empty:
+            continue
+        if so.geom_type == 'Polygon':
+            flat_obs.append(so)
+        elif hasattr(so, 'geoms'):
+            for g in so.geoms:
+                if g.geom_type == 'Polygon' and not g.is_empty:
+                    flat_obs.append(g)
+
+    # Try both orientations on this region
+    best_placements: List[PlacedBay] = []
+    best_q_contribution = float('inf')
+
+    for orient in ('H', 'V'):
+        region_results = _pack_region_oriented(
+            region_poly, flat_obs, ceiling, bay_types, orient,
+        )
+        if not region_results:
+            continue
+        # Score this region's contribution independently: just the ratio
+        # we'd see if these were the only bays placed.
+        total_price = sum(p.bay_type.price for p in region_results)
+        total_loads = sum(p.bay_type.n_loads for p in region_results)
+        total_area = sum(p.bay_type.area for p in region_results)
+        region_area = r_width * r_height
+        local_cov = total_area / region_area
+        # Local quality: price/load weighted by how much area it gave us
+        if total_loads <= 0 or total_price <= 0:
+            continue
+        local_quality = (total_price / total_loads) / (local_cov + 0.01)
+        if local_quality < best_q_contribution:
+            best_q_contribution = local_quality
+            best_placements = region_results
+
+    return best_placements
+
+
+def _pack_region_oriented(
+    region_poly: Polygon,
+    obstacles: List[Polygon],
+    ceiling: Ceiling,
+    bay_types: List[BayType],
+    orientation: str,
+) -> List[PlacedBay]:
+    """Do a multi-criteria greedy strip-pack inside a rectangular region.
+
+    orientation = 'H' (horizontal strips) or 'V' (vertical strips, achieved
+    by transposing the region).
+    """
+    if orientation == 'V':
+        # Transpose: swap x and y of region and obstacles
+        minx, miny, maxx, maxy = region_poly.bounds
+        t_region = box(miny, minx, maxy, maxx)
+        t_obs = [box(oy0, ox0, oy1, ox1)
+                 for (ox0, oy0, ox1, oy1) in [o.bounds for o in obstacles]]
+        t_ceiling = _transpose_ceiling(ceiling, region_poly)
+        fs = compute_free_space(t_region, t_obs)
+    else:
+        t_region = region_poly
+        t_obs = obstacles
+        t_ceiling = ceiling
+        fs = compute_free_space(t_region, t_obs)
+
+    if fs.is_empty:
+        return []
+
+    # Try 2 depths × 2 start_rot × 3 criteria = 12 fast passes per region
+    depths = set()
+    for bt in bay_types:
+        depths.add(bt.depth)
+        depths.add(bt.width)
+    gap_for_depth: dict = {}
+    for bt in bay_types:
+        for d in (bt.depth, bt.width):
+            gap_for_depth[d] = min(gap_for_depth.get(d, bt.gap), bt.gap)
+
+    # Reduced criteria set for per-region search (region-level search is
+    # cheaper and we don't need all 6 variants)
+    region_criteria = CRITERIA[:3]
+
+    best_eng: Optional[FastCollisionEngine] = None
+    best_score = float('inf')
+
+    for depth in sorted(depths, reverse=True):
+        gap = gap_for_depth[depth]
+        for start_rot in (0, 180):
+            for crit_name, crit in region_criteria:
+                eng = strip_pack_one_pass(
+                    depth, gap, start_rot, crit,
+                    bay_types, t_region, t_obs, t_ceiling, fs,
+                )
+                if not eng.placed_bays:
+                    continue
+                # Local score
+                placed = eng.placed_bays
+                total_price = sum(p.bay_type.price for p in placed)
+                total_loads = sum(p.bay_type.n_loads for p in placed)
+                total_area = sum(p.bay_type.area for p in placed)
+                region_area = t_region.area
+                local_cov = total_area / region_area if region_area > 0 else 0
+                if total_loads <= 0:
+                    continue
+                local_q = (total_price / total_loads) ** (2 - local_cov)
+                if local_q < best_score:
+                    best_score = local_q
+                    best_eng = eng
+
+    if best_eng is None:
+        return []
+
+    # Un-transpose if needed
+    if orientation == 'V':
+        return [_transpose_placed(p) for p in best_eng.placed_bays]
+    else:
+        return list(best_eng.placed_bays)
+
+
+# ─────────────────────────────────────────────
+# Region-based solver entry point
+# ─────────────────────────────────────────────
+
+def solve_one_case_regional(
+    warehouse: Polygon,
+    obstacles: List[Polygon],
+    ceiling: Ceiling,
+    bay_types: List[BayType],
+    time_limit: float = 8.0,
+    verbose: bool = False,
+) -> Tuple[List[PlacedBay], List[Tuple[float, float, float, float]]]:
+    """Decompose the warehouse into rectangles, pack each independently.
+
+    Try multiple processing orders and keep the best.
+    """
+    total_start = time.time()
+    usable_area_val = usable_area(warehouse, obstacles)
+
+    rectangles = decompose_into_rectangles(warehouse, obstacles)
+    if verbose:
+        print(f"    [region] decomposed into {len(rectangles)} rectangles")
+        for i, r in enumerate(rectangles):
+            print(f"    [region]   #{i}: ({r[0]:.0f},{r[1]:.0f})-({r[2]:.0f},{r[3]:.0f}) "
+                  f"size={r[2]-r[0]:.0f}×{r[3]-r[1]:.0f}")
+
+    # Candidate orderings: largest-first and by position (Y then X)
+    def area_of(r):
+        return (r[2] - r[0]) * (r[3] - r[1])
+
+    orderings = [
+        sorted(range(len(rectangles)), key=lambda i: -area_of(rectangles[i])),
+        sorted(range(len(rectangles)), key=lambda i: (rectangles[i][1], rectangles[i][0])),
+        list(range(len(rectangles))),  # as-given
+    ]
+    # Dedup orderings
+    seen = set()
+    unique_orderings = []
+    for o in orderings:
+        t = tuple(o)
+        if t not in seen:
+            seen.add(t)
+            unique_orderings.append(o)
+
+    best_placements: List[PlacedBay] = []
+    best_q = float('inf')
+
+    per_ordering_budget = (time_limit * 0.7) / max(1, len(unique_orderings))
+
+    for ordering in unique_orderings:
+        if time.time() - total_start > time_limit * 0.85:
+            break
+
+        # Start with an engine containing no placements
+        engine = FastCollisionEngine(warehouse, obstacles, ceiling)
+        placed: List[PlacedBay] = []
+
+        order_start = time.time()
+        for ri in ordering:
+            if time.time() - order_start > per_ordering_budget:
+                break
+            region = rectangles[ri]
+            region_placements = _pack_region(
+                region, bay_types, ceiling, engine, placed,
+                per_ordering_budget / len(ordering),
+            )
+            # Filter: double-check each against the live engine
+            for pb in region_placements:
+                if engine.can_place(pb):
+                    engine.place(pb)
+                    placed.append(pb)
+
+        if not placed:
+            continue
+
+        q = compute_score(placed, usable_area_val)
+        if verbose:
+            cov = sum(p.bay_type.area for p in placed) / usable_area_val
+            elapsed = time.time() - total_start
+            marker = '★' if q < best_q else ' '
+            print(f"    [region] order={ordering} "
+                  f"bays={len(placed)} cov={cov:.1%} Q={q:.2f} t={elapsed:.2f}s {marker}")
+
+        if q < best_q:
+            best_q = q
+            best_placements = placed
+
+    # Post-fill with the deterministic anchor-based gap-filler
+    if best_placements:
+        final_engine = FastCollisionEngine(warehouse, obstacles, ceiling)
+        for pb in best_placements:
+            if final_engine.can_place(pb):
+                final_engine.place(pb)
+
+        elapsed = time.time() - total_start
+        fill_budget = max(0.2, time_limit - elapsed - 0.3)
+        if fill_budget > 0.2:
+            fill_gaps_deterministic(
+                final_engine, bay_types, warehouse, usable_area_val, fill_budget,
+            )
+        return final_engine.placed_bays, rectangles
+
+    return best_placements, rectangles
+
 
 
 if __name__ == '__main__':

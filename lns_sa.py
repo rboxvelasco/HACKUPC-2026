@@ -746,7 +746,7 @@ def sa_accept(delta_q: float, temperature: float, rng: random.Random) -> bool:
 
 @dataclass
 class LNSConfig:
-    time_limit: float = 3.0
+    time_limit: float = 25.0
     initial_temperature: float = 500.0
     final_temperature: float = 1.0
     destroy_radius_factor: float = 5.0  # radius (in cells) = factor × max_bay_dim_cells
@@ -906,7 +906,7 @@ if __name__ == '__main__':
     in_sol = sys.argv[2]
     out_sol = sys.argv[3] if len(sys.argv) > 3 else in_sol.replace('.csv', '_lns.csv')
 
-    cfg = LNSConfig(time_limit=3.0, verbose=True)
+    cfg = LNSConfig(time_limit=25.0, verbose=True)
     print(f"[lns] {case_dir}  ←  {in_sol}  (budget={cfg.time_limit}s)")
 
     # Starting score (for comparison)
