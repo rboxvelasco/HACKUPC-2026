@@ -23,7 +23,7 @@ This is the Mecalux's project for the HackUPC 2026 this project consist on a opt
 
 ## Goal
 Place bays in a warehouse the cheapest way using the largest ammount of area:
-$$Q = \left( \sum_{\text{bay}} \frac{\text{price}}{\text{loads}} \right)^{2 - \frac{\sum_{\text{bay}} \text{area}}{\text{area}_{\text{warehouse}}}}$$
+$$Q = \left( \frac{\sum_{\text{bay}} \text{price}}{\sum_{\text{bay}} \text{loads}} \right)^{2 - \frac{\sum_{\text{bay}} \text{area}}{\text{area}_{\text{warehouse}}}}$$
 
 Each experiment needs to be finished in 30s this means that the case should finish in 10s
 
