@@ -1,0 +1,1789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Case15_mega — Warehouse Optimizer</title>
+
+<!-- Three.js via import map (ESM) -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<style>
+:root {
+    --bg: #0e0f13;
+    --bg-2: #14161c;
+    --card: #1a1d25;
+    --card-2: #22262f;
+    --text: #e9eaf0;
+    --text2: #8a8f9c;
+    --text3: #5a5f6c;
+    --border: #2a2e38;
+    --accent: #6c9cff;
+    --accent-2: #4a7bff;
+    --red: #ff5d66;
+    --green: #52d987;
+    --orange: #ffb057;
+    --yellow: #ffe066;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { height: 100%; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display',
+                 'Inter', 'Helvetica Neue', Arial, sans-serif;
+    background: var(--bg); color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+}
+
+/* ── Sidebar ───────────────────────────────── */
+.sidebar {
+    position: fixed; left: 0; top: 0; bottom: 0; width: 300px;
+    background: var(--bg-2);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; z-index: 10;
+}
+.sidebar-header {
+    padding: 22px 20px 14px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #1a1d26 0%, var(--bg-2) 100%);
+}
+.sidebar-header h1 {
+    font-size: 19px; font-weight: 600; letter-spacing: -0.3px;
+    display: flex; align-items: center; gap: 10px;
+}
+.dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 12px var(--accent);
+}
+.sidebar-header .subtitle {
+    font-size: 12px; color: var(--text2); margin-top: 4px;
+    text-transform: uppercase; letter-spacing: 0.6px;
+}
+
+/* Stats grid */
+.stats {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 1px; background: var(--border);
+    border-bottom: 1px solid var(--border);
+}
+.stat { background: var(--bg-2); padding: 14px 16px; }
+.stat .value {
+    font-size: 22px; font-weight: 600; letter-spacing: -0.5px;
+    font-variant-numeric: tabular-nums;
+}
+.stat .value.green { color: var(--green); }
+.stat .value.orange { color: var(--orange); }
+.stat .value.red { color: var(--red); }
+.stat .label {
+    font-size: 10px; color: var(--text2); text-transform: uppercase;
+    letter-spacing: 0.7px; margin-top: 3px; font-weight: 500;
+}
+.stat .delta {
+    font-size: 10px; margin-top: 5px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+}
+.delta.up { color: var(--green); }
+.delta.down { color: var(--red); }
+.delta.flat { color: var(--text3); }
+
+/* Controls */
+.controls {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+}
+.controls h3 {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.7px;
+    color: var(--text2); margin-bottom: 10px; font-weight: 600;
+}
+.toggle {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 13px; color: var(--text); margin-bottom: 8px;
+}
+.toggle:last-child { margin-bottom: 0; }
+.toggle input[type=checkbox] {
+    appearance: none; -webkit-appearance: none;
+    width: 34px; height: 20px; border-radius: 10px;
+    background: var(--card-2); position: relative; cursor: pointer;
+    transition: background 0.2s; border: 1px solid var(--border);
+}
+.toggle input[type=checkbox]:checked { background: var(--accent-2); border-color: var(--accent-2); }
+.toggle input[type=checkbox]::after {
+    content: ''; position: absolute; top: 1px; left: 1px;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: #eeeff4; transition: transform 0.2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+}
+.toggle input[type=checkbox]:checked::after { transform: translateX(14px); }
+
+/* Solution switcher */
+.switch {
+    display: flex;
+    border: 1px solid var(--border); border-radius: 9px; overflow: hidden;
+    background: var(--card);
+}
+.switch-btn {
+    flex: 1; background: transparent; border: none; cursor: pointer;
+    padding: 8px 14px; font-size: 13px; color: var(--text);
+    transition: background 0.15s, color 0.15s;
+    font-weight: 500;
+    border-right: 1px solid var(--border);
+}
+.switch-btn:last-child { border-right: none; }
+.switch-btn:hover { background: var(--card-2); }
+.switch-btn.active {
+    background: var(--accent-2); color: white;
+}
+
+/* Bay list */
+.bay-list-header {
+    padding: 14px 20px 6px;
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.7px;
+    color: var(--text2); font-weight: 600;
+}
+.bay-list {
+    flex: 1; overflow-y: auto; padding: 0 10px 12px;
+}
+.bay-list::-webkit-scrollbar { width: 6px; }
+.bay-list::-webkit-scrollbar-thumb { background: var(--card-2); border-radius: 3px; }
+.bay-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 10px; border-radius: 8px; cursor: pointer;
+    transition: background 0.12s; font-size: 12.5px;
+    margin-bottom: 1px;
+}
+.bay-item:hover { background: var(--card); }
+.bay-item.active { background: rgba(108, 156, 255, 0.12); outline: 1px solid rgba(108,156,255,0.3); }
+.bay-dot {
+    width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0;
+    box-shadow: 0 0 6px rgba(0,0,0,0.3);
+}
+.bay-item .info { flex: 1; min-width: 0; }
+.bay-item .info .name { font-weight: 500; }
+.bay-item .info .detail { font-size: 10.5px; color: var(--text2); }
+
+/* ── Main stage ────────────────────────────── */
+.stage {
+    margin-left: 300px; height: 100vh; position: relative;
+    background:
+        radial-gradient(ellipse at top, #1a1e2a 0%, var(--bg) 60%, #07080a 100%);
+}
+
+/* View mode toggle */
+.view-toggle-wrap {
+    position: absolute; top: 18px; left: 50%;
+    transform: translateX(-50%);
+    display: flex; gap: 10px;
+    z-index: 20;
+}
+.view-toggle {
+    display: flex; gap: 0;
+    background: rgba(26, 29, 37, 0.9);
+    border: 1px solid var(--border); border-radius: 10px;
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    overflow: hidden;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+}
+.vmode-btn {
+    background: transparent; border: none; cursor: pointer;
+    padding: 8px 20px; font-size: 13px; color: var(--text2);
+    font-weight: 600; letter-spacing: 0.3px;
+    transition: color 0.15s, background 0.15s;
+    min-width: 70px;
+}
+.vmode-btn:hover { color: var(--text); }
+.vmode-btn.active {
+    background: var(--accent-2); color: white;
+}
+
+/* Catalog view */
+#catalog {
+    display: none; width: 100%; height: 100%;
+    overflow-y: auto; padding: 70px 28px 28px;
+}
+.stage.mode-catalog #canvas2d,
+.stage.mode-catalog #canvas3d { display: none; }
+.stage.mode-catalog #catalog { display: block; }
+.catalog-header {
+    max-width: 1400px; margin: 0 auto 20px;
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 16px;
+}
+.catalog-header h2 {
+    font-size: 20px; font-weight: 600; letter-spacing: -0.3px;
+}
+.catalog-header .sub {
+    font-size: 12px; color: var(--text2);
+    text-transform: uppercase; letter-spacing: 0.6px;
+}
+.catalog-grid {
+    max-width: 1400px; margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
+}
+.catalog-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; overflow: hidden;
+    transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+    display: flex; flex-direction: column;
+    cursor: pointer;
+}
+.catalog-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(108,156,255,0.4);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+.catalog-preview {
+    position: relative;
+    height: 180px;
+    background:
+        radial-gradient(ellipse at top, #1f2533 0%, #10131a 70%);
+    border-bottom: 1px solid var(--border);
+}
+.catalog-preview canvas { display: block; width: 100%; height: 100%; }
+.catalog-chip {
+    position: absolute; top: 10px; left: 10px;
+    width: 12px; height: 12px; border-radius: 4px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.4);
+}
+.catalog-id {
+    position: absolute; top: 8px; right: 10px;
+    font-size: 11px; color: var(--text2);
+    font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+    background: rgba(14,15,19,0.7);
+    padding: 2px 7px; border-radius: 5px;
+    border: 1px solid var(--border);
+}
+.catalog-hint {
+    position: absolute; bottom: 8px; right: 10px;
+    font-size: 10px; color: var(--text2);
+    background: rgba(14,15,19,0.7);
+    padding: 3px 8px; border-radius: 5px;
+    border: 1px solid var(--border);
+    opacity: 0; transition: opacity 0.15s;
+}
+.catalog-card:hover .catalog-hint { opacity: 1; }
+.catalog-body {
+    padding: 12px 14px 14px;
+    display: flex; flex-direction: column; gap: 6px;
+}
+.catalog-title {
+    font-size: 14px; font-weight: 600;
+    display: flex; align-items: center; gap: 8px;
+}
+.catalog-dims {
+    font-size: 12px; color: var(--text2);
+    font-variant-numeric: tabular-nums;
+    font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+}
+.catalog-meta {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 4px 10px; margin-top: 4px;
+    font-size: 11px; color: var(--text2);
+}
+.catalog-meta b { color: var(--text); font-weight: 500; }
+
+/* Catalog 3D modal */
+.modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(6, 7, 10, 0.72);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    display: none; align-items: center; justify-content: center;
+    z-index: 200;
+    animation: fadeIn 0.18s ease;
+}
+.modal-overlay.open { display: flex; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.modal {
+    width: min(880px, 92vw);
+    height: min(620px, 88vh);
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.6);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+}
+.modal-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+}
+.modal-header .chip {
+    width: 14px; height: 14px; border-radius: 4px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.4);
+}
+.modal-header h3 {
+    font-size: 16px; font-weight: 600; letter-spacing: -0.2px;
+    flex: 1;
+}
+.modal-close {
+    background: transparent; border: 1px solid var(--border);
+    color: var(--text); font-size: 14px;
+    width: 30px; height: 30px; border-radius: 8px;
+    cursor: pointer; display: flex; align-items: center;
+    justify-content: center;
+    transition: background 0.15s, border-color 0.15s;
+}
+.modal-close:hover { background: var(--card-2); border-color: var(--accent-2); }
+.modal-body {
+    flex: 1; display: grid;
+    grid-template-columns: 1fr 240px;
+    min-height: 0;
+}
+.modal-3d {
+    position: relative;
+    background: radial-gradient(ellipse at top, #1a1e2a 0%, var(--bg) 70%);
+}
+.modal-3d canvas { display: block; }
+.modal-info {
+    border-left: 1px solid var(--border);
+    padding: 18px 18px;
+    display: flex; flex-direction: column; gap: 10px;
+    font-size: 13px;
+    background: var(--bg-2);
+    overflow-y: auto;
+}
+.modal-info .row {
+    display: flex; justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+}
+.modal-info .row:last-child { border-bottom: none; }
+.modal-info .row .k {
+    color: var(--text2);
+    text-transform: uppercase; letter-spacing: 0.5px;
+    font-size: 10.5px; font-weight: 600;
+    align-self: center;
+}
+.modal-info .row .v {
+    color: var(--text); font-weight: 500;
+    font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Case badge */
+.case-badge {
+    position: absolute; top: 18px; right: 18px;
+    background: rgba(26, 29, 37, 0.9);
+    border: 1px solid var(--border);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    padding: 6px 12px; border-radius: 8px;
+    font-size: 12px; color: var(--text2);
+    font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+    z-index: 20;
+}
+
+/* Canvases */
+#canvas2d {
+    display: block; width: 100%; height: 100%;
+    cursor: grab;
+}
+#canvas2d:active { cursor: grabbing; }
+#canvas3d {
+    display: none; width: 100%; height: 100%;
+}
+.stage.mode-3d #canvas2d { display: none; }
+.stage.mode-3d #canvas3d { display: block; }
+
+/* Zoom/help controls */
+.float-controls {
+    position: absolute; bottom: 20px; right: 20px;
+    display: flex; flex-direction: column; gap: 1px;
+    background: var(--border); border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+    z-index: 20;
+}
+.float-btn {
+    width: 40px; height: 36px; background: rgba(26, 29, 37, 0.95);
+    border: none; font-size: 16px; cursor: pointer;
+    color: var(--text); display: flex; align-items: center;
+    justify-content: center; transition: background 0.15s;
+    backdrop-filter: blur(10px);
+}
+.float-btn:hover { background: var(--card-2); }
+
+/* Tooltip */
+.tooltip {
+    position: fixed;
+    background: rgba(26, 29, 37, 0.96);
+    border: 1px solid var(--border);
+    padding: 10px 14px; border-radius: 10px;
+    font-size: 12px; pointer-events: none;
+    display: none; z-index: 100;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    line-height: 1.55;
+    color: var(--text);
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    max-width: 260px;
+}
+.tooltip b { font-weight: 600; color: white; }
+.tooltip .dim { color: var(--text2); }
+.tooltip .hdr {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 4px;
+}
+.tooltip .chip {
+    width: 10px; height: 10px; border-radius: 3px;
+}
+
+/* Legend (3D only) */
+.legend {
+    position: absolute; bottom: 20px; left: 20px;
+    background: rgba(26, 29, 37, 0.9);
+    border: 1px solid var(--border);
+    backdrop-filter: blur(14px);
+    padding: 10px 14px; border-radius: 10px;
+    font-size: 11px; color: var(--text2);
+    z-index: 20;
+    display: flex; flex-direction: column; gap: 5px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+}
+.legend .row { display: flex; align-items: center; gap: 8px; }
+.legend .sq {
+    width: 12px; height: 12px; border-radius: 3px;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+
+/* Loading hint */
+.loading {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text2); font-size: 13px;
+    pointer-events: none;
+}
+</style>
+</head>
+<body>
+
+<div class="sidebar">
+    <div class="sidebar-header">
+        <h1><span class="dot"></span>Case15_mega</h1>
+        <div class="subtitle">Warehouse Optimizer</div>
+    </div>
+
+    <div class="stats" id="statsGrid"></div>
+
+
+
+    <div class="controls">
+        <h3>Display</h3>
+        <div class="toggle"><span>Gaps / aisles</span><input type="checkbox" id="showGaps" checked></div>
+        <div class="toggle"><span>Obstacles</span><input type="checkbox" id="showObstacles" checked></div>
+        <div class="toggle"><span>Labels</span><input type="checkbox" id="showLabels" checked></div>
+        <div class="toggle"><span>Grid</span><input type="checkbox" id="showGrid"></div>
+        <div class="toggle" data-mode="3d"><span>Ceiling mesh</span><input type="checkbox" id="showCeiling" checked></div>
+        <div class="toggle" data-mode="3d"><span>Axes helper</span><input type="checkbox" id="showAxes"></div>
+    </div>
+
+    <div class="bay-list-header" id="bayListHeader">Placed Bays</div>
+    <div class="bay-list" id="bayList"></div>
+</div>
+
+<div class="stage mode-2d" id="stage">
+
+    <div class="view-toggle-wrap">
+        <div class="view-toggle" id="pageToggle">
+            <button class="vmode-btn active" data-page="scene">Scene</button>
+            <button class="vmode-btn" data-page="catalog">Catalog</button>
+        </div>
+        <div class="view-toggle" id="modeToggle">
+            <button class="vmode-btn active" data-mode="2d">2D</button>
+            <button class="vmode-btn" data-mode="3d">3D</button>
+        </div>
+    </div>
+
+    <div class="case-badge" id="caseBadge">—</div>
+
+    <canvas id="canvas2d"></canvas>
+    <div id="canvas3d"></div>
+    <div id="catalog">
+        <div class="catalog-header">
+            <div>
+                <h2>Bay Type Catalog</h2>
+                <div class="sub">All available bay types for this case · click any card for 3D view</div>
+            </div>
+            <div class="sub" id="catalogCount"></div>
+        </div>
+        <div class="catalog-grid" id="catalogGrid"></div>
+    </div>
+
+    <div class="legend" id="legend3d" style="display:none">
+        <div class="row"><div class="sq" style="background:#3a6fe6"></div>Bay</div>
+        <div class="row"><div class="sq" style="background:rgba(108,156,255,0.35);border-color:rgba(108,156,255,0.6)"></div>Gap / aisle</div>
+        <div class="row"><div class="sq" style="background:#55606e"></div>Obstacle</div>
+        <div class="row"><div class="sq" style="background:rgba(255,176,87,0.25);border-color:rgba(255,176,87,0.5)"></div>Ceiling</div>
+    </div>
+
+    <div class="float-controls" id="float2d">
+        <button class="float-btn" id="zoomIn" title="Zoom in">+</button>
+        <button class="float-btn" id="zoomOut" title="Zoom out">−</button>
+        <button class="float-btn" id="zoomFit" title="Fit to view" style="font-size:13px">⌂</button>
+    </div>
+
+    <div class="float-controls" id="float3d" style="display:none;">
+        <button class="float-btn" id="view3dTop" title="Top view">T</button>
+        <button class="float-btn" id="view3dIso" title="Isometric">I</button>
+        <button class="float-btn" id="view3dFront" title="Front view">F</button>
+    </div>
+</div>
+
+<div class="modal-overlay" id="catalogModal">
+    <div class="modal" role="dialog" aria-modal="true">
+        <div class="modal-header">
+            <div class="chip" id="modalChip"></div>
+            <h3 id="modalTitle">Bay Type</h3>
+            <button class="modal-close" id="modalClose" aria-label="Close">×</button>
+        </div>
+        <div class="modal-body">
+            <div class="modal-3d" id="modal3d"></div>
+            <div class="modal-info" id="modalInfo"></div>
+        </div>
+    </div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const DATA = {"case": "Case15_mega", "wh": [[0, 0], [60000, 0], [60000, 8000], [52000, 8000], [52000, 4000], [44000, 4000], [44000, 8000], [36000, 8000], [36000, 14000], [60000, 14000], [60000, 30000], [52000, 30000], [52000, 22000], [44000, 22000], [44000, 34000], [54000, 34000], [54000, 45000], [30000, 45000], [30000, 38000], [22000, 38000], [22000, 45000], [0, 45000], [0, 30000], [8000, 30000], [8000, 22000], [0, 22000], [0, 14000], [14000, 14000], [14000, 8000], [0, 8000], [0, 0]], "obs": [{"x": 3000.0, "y": 3000.0, "w": 600.0, "h": 600.0}, {"x": 9000.0, "y": 3000.0, "w": 600.0, "h": 600.0}, {"x": 20000.0, "y": 3000.0, "w": 600.0, "h": 600.0}, {"x": 26000.0, "y": 3000.0, "w": 600.0, "h": 600.0}, {"x": 56000.0, "y": 2000.0, "w": 500.0, "h": 500.0}, {"x": 3000.0, "y": 18000.0, "w": 500.0, "h": 500.0}, {"x": 9000.0, "y": 18000.0, "w": 500.0, "h": 500.0}, {"x": 17000.0, "y": 17000.0, "w": 2000.0, "h": 400.0}, {"x": 26000.0, "y": 16000.0, "w": 400.0, "h": 3000.0}, {"x": 40000.0, "y": 17000.0, "w": 600.0, "h": 600.0}, {"x": 48000.0, "y": 17000.0, "w": 600.0, "h": 600.0}, {"x": 56000.0, "y": 17000.0, "w": 600.0, "h": 600.0}, {"x": 3000.0, "y": 33000.0, "w": 500.0, "h": 500.0}, {"x": 11000.0, "y": 25000.0, "w": 500.0, "h": 500.0}, {"x": 3000.0, "y": 40000.0, "w": 500.0, "h": 500.0}, {"x": 11000.0, "y": 35000.0, "w": 500.0, "h": 500.0}, {"x": 18000.0, "y": 26000.0, "w": 2500.0, "h": 500.0}, {"x": 18000.0, "y": 32000.0, "w": 500.0, "h": 4000.0}, {"x": 36000.0, "y": 38000.0, "w": 500.0, "h": 4000.0}, {"x": 42000.0, "y": 36000.0, "w": 3000.0, "h": 400.0}, {"x": 42000.0, "y": 41500.0, "w": 3000.0, "h": 400.0}, {"x": 49000.0, "y": 37000.0, "w": 500.0, "h": 6000.0}, {"x": 20000.0, "y": 10000.0, "w": 500.0, "h": 2000.0}, {"x": 40000.0, "y": 28000.0, "w": 500.0, "h": 2500.0}, {"x": 10000.0, "y": 17000.0, "w": 400.0, "h": 400.0}, {"x": 30000.0, "y": 20000.0, "w": 600.0, "h": 600.0}, {"x": 48000.0, "y": 41000.0, "w": 800.0, "h": 300.0}], "solutions": [{"bays": [{"i": 0, "tid": 3, "x": 0, "y": 0, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 0.0, "gy": 0.0, "gw": 4000.0, "gh": 1400.0}, {"i": 1, "tid": 2, "x": 4000, "y": 0, "w": 3000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2500, "ld": 9, "gx": 4000.0, "gy": 0.0, "gw": 3000.0, "gh": 1400.0}, {"i": 2, "tid": 11, "x": 7000, "y": 0, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 7000.0, "gy": 0.0, "gw": 750.0, "gh": 1200.0}, {"i": 3, "tid": 11, "x": 8200, "y": 0, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 8200.0, "gy": 0.0, "gw": 750.0, "gh": 1200.0}, {"i": 4, "tid": 11, "x": 9400, "y": 0, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 9400.0, "gy": 0.0, "gw": 750.0, "gh": 1200.0}, {"i": 5, "tid": 11, "x": 10600, "y": 0, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 10600.0, "gy": 0.0, "gw": 750.0, "gh": 1200.0}, {"i": 6, "tid": 11, "x": 11800, "y": 0, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 11800.0, "gy": 0.0, "gw": 750.0, "gh": 1200.0}, {"i": 7, "tid": 11, "x": 13000, "y": 0, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 13000.0, "gy": 0.0, "gw": 750.0, "gh": 1200.0}, {"i": 8, "tid": 3, "x": 14200, "y": 0, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 14200.0, "gy": 0.0, "gw": 4000.0, "gh": 1400.0}, {"i": 9, "tid": 3, "x": 18200, "y": 0, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 18200.0, "gy": 0.0, "gw": 4000.0, "gh": 1400.0}, {"i": 10, "tid": 3, "x": 22200, "y": 0, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 22200.0, "gy": 0.0, "gw": 4000.0, "gh": 1400.0}, {"i": 11, "tid": 3, "x": 26200, "y": 0, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 26200.0, "gy": 0.0, "gw": 4000.0, "gh": 1400.0}, {"i": 12, "tid": 3, "x": 30200, "y": 0, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 30200.0, "gy": 0.0, "gw": 4000.0, "gh": 1400.0}, {"i": 13, "tid": 2, "x": 34200, "y": 0, "w": 3000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2500, "ld": 9, "gx": 34200.0, "gy": 0.0, "gw": 3000.0, "gh": 1400.0}, {"i": 14, "tid": 11, "x": 37200, "y": 0, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 37200.0, "gy": 0.0, "gw": 750.0, "gh": 1200.0}, {"i": 15, "tid": 11, "x": 38400, "y": 0, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 38400.0, "gy": 0.0, "gw": 750.0, "gh": 1200.0}, {"i": 16, "tid": 11, "x": 39600, "y": 0, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 39600.0, "gy": 0.0, "gw": 750.0, "gh": 1200.0}, {"i": 17, "tid": 11, "x": 40800, "y": 0, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 40800.0, "gy": 0.0, "gw": 750.0, "gh": 1200.0}, {"i": 18, "tid": 11, "x": 42000, "y": 0, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 42000.0, "gy": 0.0, "gw": 750.0, "gh": 1200.0}, {"i": 19, "tid": 11, "x": 43200, "y": 0, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 43200.0, "gy": 0.0, "gw": 750.0, "gh": 1200.0}, {"i": 20, "tid": 3, "x": 44400, "y": 0, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 44400.0, "gy": 0.0, "gw": 4000.0, "gh": 1400.0}, {"i": 21, "tid": 0, "x": 48400, "y": 0, "w": 1000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 1600, "ld": 3, "gx": 48400.0, "gy": 0.0, "gw": 1000.0, "gh": 1400.0}, {"i": 22, "tid": 11, "x": 49400, "y": 0, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 49400.0, "gy": 0.0, "gw": 750.0, "gh": 1200.0}, {"i": 23, "tid": 11, "x": 50600, "y": 0, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 50600.0, "gy": 0.0, "gw": 750.0, "gh": 1200.0}, {"i": 24, "tid": 11, "x": 51800, "y": 0, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 51800.0, "gy": 0.0, "gw": 750.0, "gh": 1200.0}, {"i": 25, "tid": 11, "x": 53000, "y": 0, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 53000.0, "gy": 0.0, "gw": 750.0, "gh": 1200.0}, {"i": 26, "tid": 11, "x": 54200, "y": 0, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 54200.0, "gy": 0.0, "gw": 750.0, "gh": 1200.0}, {"i": 27, "tid": 11, "x": 55400, "y": 0, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 55400.0, "gy": 0.0, "gw": 750.0, "gh": 1200.0}, {"i": 28, "tid": 2, "x": 56600, "y": 0, "w": 3000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2500, "ld": 9, "gx": 56600.0, "gy": 0.0, "gw": 3000.0, "gh": 1400.0}, {"i": 29, "tid": 11, "x": 7200, "y": 1350, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 7050.0, "gy": 1350.0, "gw": 750.0, "gh": 1200.0}, {"i": 30, "tid": 11, "x": 8400, "y": 1350, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 8250.0, "gy": 1350.0, "gw": 750.0, "gh": 1200.0}, {"i": 31, "tid": 11, "x": 9600, "y": 1350, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 9450.0, "gy": 1350.0, "gw": 750.0, "gh": 1200.0}, {"i": 32, "tid": 11, "x": 10800, "y": 1350, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 10650.0, "gy": 1350.0, "gw": 750.0, "gh": 1200.0}, {"i": 33, "tid": 11, "x": 12000, "y": 1350, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 11850.0, "gy": 1350.0, "gw": 750.0, "gh": 1200.0}, {"i": 34, "tid": 11, "x": 13200, "y": 1350, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 13050.0, "gy": 1350.0, "gw": 750.0, "gh": 1200.0}, {"i": 35, "tid": 11, "x": 37200, "y": 1350, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 37050.0, "gy": 1350.0, "gw": 750.0, "gh": 1200.0}, {"i": 36, "tid": 11, "x": 38400, "y": 1350, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 38250.0, "gy": 1350.0, "gw": 750.0, "gh": 1200.0}, {"i": 37, "tid": 11, "x": 39600, "y": 1350, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 39450.0, "gy": 1350.0, "gw": 750.0, "gh": 1200.0}, {"i": 38, "tid": 11, "x": 40800, "y": 1350, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 40650.0, "gy": 1350.0, "gw": 750.0, "gh": 1200.0}, {"i": 39, "tid": 11, "x": 42000, "y": 1350, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 41850.0, "gy": 1350.0, "gw": 750.0, "gh": 1200.0}, {"i": 40, "tid": 11, "x": 43200, "y": 1350, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 43050.0, "gy": 1350.0, "gw": 750.0, "gh": 1200.0}, {"i": 41, "tid": 11, "x": 49800, "y": 1350, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 49650.0, "gy": 1350.0, "gw": 750.0, "gh": 1200.0}, {"i": 42, "tid": 11, "x": 51000, "y": 1350, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 50850.0, "gy": 1350.0, "gw": 750.0, "gh": 1200.0}, {"i": 43, "tid": 11, "x": 52200, "y": 1350, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 52050.0, "gy": 1350.0, "gw": 750.0, "gh": 1200.0}, {"i": 44, "tid": 11, "x": 53400, "y": 1350, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 53250.0, "gy": 1350.0, "gw": 750.0, "gh": 1200.0}, {"i": 45, "tid": 11, "x": 54600, "y": 1350, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 54450.0, "gy": 1350.0, "gw": 750.0, "gh": 1200.0}, {"i": 46, "tid": 2, "x": 0, "y": 2550, "w": 3000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2500, "ld": 9, "gx": 0.0, "gy": 2550.0, "gw": 3000.0, "gh": 1400.0}, {"i": 47, "tid": 3, "x": 3600, "y": 2550, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 3600.0, "gy": 2550.0, "gw": 4000.0, "gh": 1400.0}, {"i": 48, "tid": 11, "x": 7600, "y": 2550, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 7600.0, "gy": 2550.0, "gw": 750.0, "gh": 1200.0}, {"i": 49, "tid": 11, "x": 10000, "y": 2550, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 10000.0, "gy": 2550.0, "gw": 750.0, "gh": 1200.0}, {"i": 50, "tid": 11, "x": 11200, "y": 2550, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 11200.0, "gy": 2550.0, "gw": 750.0, "gh": 1200.0}, {"i": 51, "tid": 11, "x": 12400, "y": 2550, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 12400.0, "gy": 2550.0, "gw": 750.0, "gh": 1200.0}, {"i": 52, "tid": 11, "x": 13600, "y": 2550, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 13600.0, "gy": 2550.0, "gw": 750.0, "gh": 1200.0}, {"i": 53, "tid": 3, "x": 14800, "y": 2550, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 14800.0, "gy": 2550.0, "gw": 4000.0, "gh": 1400.0}, {"i": 54, "tid": 0, "x": 18800, "y": 2550, "w": 1000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 1600, "ld": 3, "gx": 18800.0, "gy": 2550.0, "gw": 1000.0, "gh": 1400.0}, {"i": 55, "tid": 3, "x": 21000, "y": 2550, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 21000.0, "gy": 2550.0, "gw": 4000.0, "gh": 1400.0}, {"i": 56, "tid": 0, "x": 25000, "y": 2550, "w": 1000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 1600, "ld": 3, "gx": 25000.0, "gy": 2550.0, "gw": 1000.0, "gh": 1400.0}, {"i": 57, "tid": 3, "x": 26600, "y": 2550, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 26600.0, "gy": 2550.0, "gw": 4000.0, "gh": 1400.0}, {"i": 58, "tid": 3, "x": 30600, "y": 2550, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 30600.0, "gy": 2550.0, "gw": 4000.0, "gh": 1400.0}, {"i": 59, "tid": 2, "x": 34600, "y": 2550, "w": 3000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2500, "ld": 9, "gx": 34600.0, "gy": 2550.0, "gw": 3000.0, "gh": 1400.0}, {"i": 60, "tid": 11, "x": 37600, "y": 2550, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 37600.0, "gy": 2550.0, "gw": 750.0, "gh": 1200.0}, {"i": 61, "tid": 11, "x": 38800, "y": 2550, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 38800.0, "gy": 2550.0, "gw": 750.0, "gh": 1200.0}, {"i": 62, "tid": 11, "x": 40000, "y": 2550, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 40000.0, "gy": 2550.0, "gw": 750.0, "gh": 1200.0}, {"i": 63, "tid": 11, "x": 41200, "y": 2550, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 41200.0, "gy": 2550.0, "gw": 750.0, "gh": 1200.0}, {"i": 64, "tid": 11, "x": 42400, "y": 2550, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 42400.0, "gy": 2550.0, "gw": 750.0, "gh": 1200.0}, {"i": 65, "tid": 11, "x": 43600, "y": 2550, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 43600.0, "gy": 2550.0, "gw": 750.0, "gh": 1200.0}, {"i": 66, "tid": 3, "x": 44800, "y": 2550, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 44800.0, "gy": 2550.0, "gw": 4000.0, "gh": 1400.0}, {"i": 67, "tid": 0, "x": 48800, "y": 2550, "w": 1000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 1600, "ld": 3, "gx": 48800.0, "gy": 2550.0, "gw": 1000.0, "gh": 1400.0}, {"i": 68, "tid": 11, "x": 49800, "y": 2550, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 49800.0, "gy": 2550.0, "gw": 750.0, "gh": 1200.0}, {"i": 69, "tid": 11, "x": 51000, "y": 2550, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 51000.0, "gy": 2550.0, "gw": 750.0, "gh": 1200.0}, {"i": 70, "tid": 11, "x": 52200, "y": 2550, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 52200.0, "gy": 2550.0, "gw": 750.0, "gh": 1200.0}, {"i": 71, "tid": 11, "x": 53400, "y": 2550, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 53400.0, "gy": 2550.0, "gw": 750.0, "gh": 1200.0}, {"i": 72, "tid": 11, "x": 54600, "y": 2550, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 54600.0, "gy": 2550.0, "gw": 750.0, "gh": 1200.0}, {"i": 73, "tid": 11, "x": 55800, "y": 2550, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 55800.0, "gy": 2550.0, "gw": 750.0, "gh": 1200.0}, {"i": 74, "tid": 2, "x": 57000, "y": 2550, "w": 3000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2500, "ld": 9, "gx": 57000.0, "gy": 2550.0, "gw": 3000.0, "gh": 1400.0}, {"i": 75, "tid": 11, "x": 3000, "y": 3900, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 2850.0, "gy": 3900.0, "gw": 750.0, "gh": 1200.0}, {"i": 76, "tid": 11, "x": 7800, "y": 3900, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 7650.0, "gy": 3900.0, "gw": 750.0, "gh": 1200.0}, {"i": 77, "tid": 11, "x": 9000, "y": 3900, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 8850.0, "gy": 3900.0, "gw": 750.0, "gh": 1200.0}, {"i": 78, "tid": 11, "x": 10200, "y": 3900, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 10050.0, "gy": 3900.0, "gw": 750.0, "gh": 1200.0}, {"i": 79, "tid": 11, "x": 11400, "y": 3900, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 11250.0, "gy": 3900.0, "gw": 750.0, "gh": 1200.0}, {"i": 80, "tid": 11, "x": 12600, "y": 3900, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 12450.0, "gy": 3900.0, "gw": 750.0, "gh": 1200.0}, {"i": 81, "tid": 11, "x": 13800, "y": 3900, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 13650.0, "gy": 3900.0, "gw": 750.0, "gh": 1200.0}, {"i": 82, "tid": 0, "x": 19800, "y": 3900, "w": 1000, "d": 1200, "rot": 180, "h": 2800, "gap": 200, "pr": 1600, "ld": 3, "gx": 19800.0, "gy": 3700.0, "gw": 1000.0, "gh": 1400.0}, {"i": 83, "tid": 11, "x": 37600, "y": 3900, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 37450.0, "gy": 3900.0, "gw": 750.0, "gh": 1200.0}, {"i": 84, "tid": 11, "x": 38800, "y": 3900, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 38650.0, "gy": 3900.0, "gw": 750.0, "gh": 1200.0}, {"i": 85, "tid": 11, "x": 40000, "y": 3900, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 39850.0, "gy": 3900.0, "gw": 750.0, "gh": 1200.0}, {"i": 86, "tid": 11, "x": 41200, "y": 3900, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 41050.0, "gy": 3900.0, "gw": 750.0, "gh": 1200.0}, {"i": 87, "tid": 11, "x": 42400, "y": 3900, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 42250.0, "gy": 3900.0, "gw": 750.0, "gh": 1200.0}, {"i": 88, "tid": 11, "x": 52600, "y": 3900, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 52450.0, "gy": 3900.0, "gw": 750.0, "gh": 1200.0}, {"i": 89, "tid": 11, "x": 53800, "y": 3900, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 53650.0, "gy": 3900.0, "gw": 750.0, "gh": 1200.0}, {"i": 90, "tid": 11, "x": 55000, "y": 3900, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 54850.0, "gy": 3900.0, "gw": 750.0, "gh": 1200.0}, {"i": 91, "tid": 11, "x": 56200, "y": 3900, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 56050.0, "gy": 3900.0, "gw": 750.0, "gh": 1200.0}, {"i": 92, "tid": 11, "x": 52000, "y": 5100, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 52000.0, "gy": 5100.0, "gw": 750.0, "gh": 1200.0}, {"i": 93, "tid": 11, "x": 53200, "y": 5100, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 53200.0, "gy": 5100.0, "gw": 750.0, "gh": 1200.0}, {"i": 94, "tid": 11, "x": 54400, "y": 5100, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 54400.0, "gy": 5100.0, "gw": 750.0, "gh": 1200.0}, {"i": 95, "tid": 11, "x": 55600, "y": 5100, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 55600.0, "gy": 5100.0, "gw": 750.0, "gh": 1200.0}, {"i": 96, "tid": 2, "x": 56800, "y": 5100, "w": 3000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2500, "ld": 9, "gx": 56800.0, "gy": 5100.0, "gw": 3000.0, "gh": 1400.0}, {"i": 97, "tid": 3, "x": 0, "y": 5100, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 0.0, "gy": 5100.0, "gw": 4000.0, "gh": 1400.0}, {"i": 98, "tid": 2, "x": 4000, "y": 5100, "w": 3000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2500, "ld": 9, "gx": 4000.0, "gy": 5100.0, "gw": 3000.0, "gh": 1400.0}, {"i": 99, "tid": 11, "x": 7000, "y": 5100, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 7000.0, "gy": 5100.0, "gw": 750.0, "gh": 1200.0}, {"i": 100, "tid": 11, "x": 8200, "y": 5100, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 8200.0, "gy": 5100.0, "gw": 750.0, "gh": 1200.0}, {"i": 101, "tid": 11, "x": 9400, "y": 5100, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 9400.0, "gy": 5100.0, "gw": 750.0, "gh": 1200.0}, {"i": 102, "tid": 11, "x": 10600, "y": 5100, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 10600.0, "gy": 5100.0, "gw": 750.0, "gh": 1200.0}, {"i": 103, "tid": 11, "x": 11800, "y": 5100, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 11800.0, "gy": 5100.0, "gw": 750.0, "gh": 1200.0}, {"i": 104, "tid": 11, "x": 13000, "y": 5100, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 13000.0, "gy": 5100.0, "gw": 750.0, "gh": 1200.0}, {"i": 105, "tid": 3, "x": 14200, "y": 5100, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 14200.0, "gy": 5100.0, "gw": 4000.0, "gh": 1400.0}, {"i": 106, "tid": 3, "x": 18200, "y": 5100, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 18200.0, "gy": 5100.0, "gw": 4000.0, "gh": 1400.0}, {"i": 107, "tid": 3, "x": 22200, "y": 5100, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 22200.0, "gy": 5100.0, "gw": 4000.0, "gh": 1400.0}, {"i": 108, "tid": 3, "x": 26200, "y": 5100, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 26200.0, "gy": 5100.0, "gw": 4000.0, "gh": 1400.0}, {"i": 109, "tid": 3, "x": 30200, "y": 5100, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 30200.0, "gy": 5100.0, "gw": 4000.0, "gh": 1400.0}, {"i": 110, "tid": 2, "x": 34200, "y": 5100, "w": 3000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2500, "ld": 9, "gx": 34200.0, "gy": 5100.0, "gw": 3000.0, "gh": 1400.0}, {"i": 111, "tid": 11, "x": 37200, "y": 5100, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 37200.0, "gy": 5100.0, "gw": 750.0, "gh": 1200.0}, {"i": 112, "tid": 11, "x": 38400, "y": 5100, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 38400.0, "gy": 5100.0, "gw": 750.0, "gh": 1200.0}, {"i": 113, "tid": 11, "x": 39600, "y": 5100, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 39600.0, "gy": 5100.0, "gw": 750.0, "gh": 1200.0}, {"i": 114, "tid": 11, "x": 40800, "y": 5100, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 40800.0, "gy": 5100.0, "gw": 750.0, "gh": 1200.0}, {"i": 115, "tid": 11, "x": 42000, "y": 5100, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 42000.0, "gy": 5100.0, "gw": 750.0, "gh": 1200.0}, {"i": 116, "tid": 11, "x": 43200, "y": 5100, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 43200.0, "gy": 5100.0, "gw": 750.0, "gh": 1200.0}, {"i": 117, "tid": 11, "x": 52600, "y": 6450, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 52450.0, "gy": 6450.0, "gw": 750.0, "gh": 1200.0}, {"i": 118, "tid": 11, "x": 53800, "y": 6450, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 53650.0, "gy": 6450.0, "gw": 750.0, "gh": 1200.0}, {"i": 119, "tid": 11, "x": 55000, "y": 6450, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 54850.0, "gy": 6450.0, "gw": 750.0, "gh": 1200.0}, {"i": 120, "tid": 11, "x": 56200, "y": 6450, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 56050.0, "gy": 6450.0, "gw": 750.0, "gh": 1200.0}, {"i": 121, "tid": 11, "x": 7200, "y": 6450, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 7050.0, "gy": 6450.0, "gw": 750.0, "gh": 1200.0}, {"i": 122, "tid": 11, "x": 8400, "y": 6450, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 8250.0, "gy": 6450.0, "gw": 750.0, "gh": 1200.0}, {"i": 123, "tid": 11, "x": 9600, "y": 6450, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 9450.0, "gy": 6450.0, "gw": 750.0, "gh": 1200.0}, {"i": 124, "tid": 11, "x": 10800, "y": 6450, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 10650.0, "gy": 6450.0, "gw": 750.0, "gh": 1200.0}, {"i": 125, "tid": 11, "x": 12000, "y": 6450, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 11850.0, "gy": 6450.0, "gw": 750.0, "gh": 1200.0}, {"i": 126, "tid": 11, "x": 13200, "y": 6450, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 13050.0, "gy": 6450.0, "gw": 750.0, "gh": 1200.0}, {"i": 127, "tid": 11, "x": 37200, "y": 6450, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 37050.0, "gy": 6450.0, "gw": 750.0, "gh": 1200.0}, {"i": 128, "tid": 11, "x": 38400, "y": 6450, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 38250.0, "gy": 6450.0, "gw": 750.0, "gh": 1200.0}, {"i": 129, "tid": 11, "x": 39600, "y": 6450, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 39450.0, "gy": 6450.0, "gw": 750.0, "gh": 1200.0}, {"i": 130, "tid": 11, "x": 40800, "y": 6450, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 40650.0, "gy": 6450.0, "gw": 750.0, "gh": 1200.0}, {"i": 131, "tid": 11, "x": 42000, "y": 6450, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 41850.0, "gy": 6450.0, "gw": 750.0, "gh": 1200.0}, {"i": 132, "tid": 11, "x": 43200, "y": 6450, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 43050.0, "gy": 6450.0, "gw": 750.0, "gh": 1200.0}, {"i": 133, "tid": 3, "x": 14400, "y": 7650, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 14400.0, "gy": 7650.0, "gw": 4000.0, "gh": 1400.0}, {"i": 134, "tid": 3, "x": 18400, "y": 7650, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 18400.0, "gy": 7650.0, "gw": 4000.0, "gh": 1400.0}, {"i": 135, "tid": 3, "x": 22400, "y": 7650, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 22400.0, "gy": 7650.0, "gw": 4000.0, "gh": 1400.0}, {"i": 136, "tid": 3, "x": 26400, "y": 7650, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 26400.0, "gy": 7650.0, "gw": 4000.0, "gh": 1400.0}, {"i": 137, "tid": 3, "x": 30400, "y": 7650, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 30400.0, "gy": 7650.0, "gw": 4000.0, "gh": 1400.0}, {"i": 138, "tid": 0, "x": 34400, "y": 7650, "w": 1000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 1600, "ld": 3, "gx": 34400.0, "gy": 7650.0, "gw": 1000.0, "gh": 1400.0}, {"i": 139, "tid": 3, "x": 14000, "y": 10200, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 14000.0, "gy": 10200.0, "gw": 4000.0, "gh": 1400.0}, {"i": 140, "tid": 1, "x": 18000, "y": 10200, "w": 2000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2100, "ld": 6, "gx": 18000.0, "gy": 10200.0, "gw": 2000.0, "gh": 1400.0}, {"i": 141, "tid": 3, "x": 20500, "y": 10200, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 20500.0, "gy": 10200.0, "gw": 4000.0, "gh": 1400.0}, {"i": 142, "tid": 3, "x": 24500, "y": 10200, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 24500.0, "gy": 10200.0, "gw": 4000.0, "gh": 1400.0}, {"i": 143, "tid": 3, "x": 28500, "y": 10200, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 28500.0, "gy": 10200.0, "gw": 4000.0, "gh": 1400.0}, {"i": 144, "tid": 2, "x": 32500, "y": 10200, "w": 3000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2500, "ld": 9, "gx": 32500.0, "gy": 10200.0, "gw": 3000.0, "gh": 1400.0}, {"i": 145, "tid": 3, "x": 14000, "y": 12750, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 14000.0, "gy": 12750.0, "gw": 4000.0, "gh": 1400.0}, {"i": 146, "tid": 3, "x": 18000, "y": 12750, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 18000.0, "gy": 12750.0, "gw": 4000.0, "gh": 1400.0}, {"i": 147, "tid": 3, "x": 22000, "y": 12750, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 22000.0, "gy": 12750.0, "gw": 4000.0, "gh": 1400.0}, {"i": 148, "tid": 3, "x": 26000, "y": 12750, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 26000.0, "gy": 12750.0, "gw": 4000.0, "gh": 1400.0}, {"i": 149, "tid": 3, "x": 30000, "y": 12750, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 30000.0, "gy": 12750.0, "gw": 4000.0, "gh": 1400.0}, {"i": 150, "tid": 1, "x": 34000, "y": 12750, "w": 2000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2100, "ld": 6, "gx": 34000.0, "gy": 12750.0, "gw": 2000.0, "gh": 1400.0}, {"i": 151, "tid": 11, "x": 600, "y": 14100, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 450.0, "gy": 14100.0, "gw": 750.0, "gh": 1200.0}, {"i": 152, "tid": 11, "x": 1800, "y": 14100, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 1650.0, "gy": 14100.0, "gw": 750.0, "gh": 1200.0}, {"i": 153, "tid": 11, "x": 3000, "y": 14100, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 2850.0, "gy": 14100.0, "gw": 750.0, "gh": 1200.0}, {"i": 154, "tid": 11, "x": 4200, "y": 14100, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 4050.0, "gy": 14100.0, "gw": 750.0, "gh": 1200.0}, {"i": 155, "tid": 11, "x": 5400, "y": 14100, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 5250.0, "gy": 14100.0, "gw": 750.0, "gh": 1200.0}, {"i": 156, "tid": 11, "x": 6600, "y": 14100, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 6450.0, "gy": 14100.0, "gw": 750.0, "gh": 1200.0}, {"i": 157, "tid": 11, "x": 7800, "y": 14100, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 7650.0, "gy": 14100.0, "gw": 750.0, "gh": 1200.0}, {"i": 158, "tid": 11, "x": 9000, "y": 14100, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 8850.0, "gy": 14100.0, "gw": 750.0, "gh": 1200.0}, {"i": 159, "tid": 11, "x": 10200, "y": 14100, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 10050.0, "gy": 14100.0, "gw": 750.0, "gh": 1200.0}, {"i": 160, "tid": 11, "x": 11400, "y": 14100, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 11250.0, "gy": 14100.0, "gw": 750.0, "gh": 1200.0}, {"i": 161, "tid": 11, "x": 12600, "y": 14100, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 12450.0, "gy": 14100.0, "gw": 750.0, "gh": 1200.0}, {"i": 162, "tid": 11, "x": 36000, "y": 14100, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 35850.0, "gy": 14100.0, "gw": 750.0, "gh": 1200.0}, {"i": 163, "tid": 11, "x": 37200, "y": 14100, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 37050.0, "gy": 14100.0, "gw": 750.0, "gh": 1200.0}, {"i": 164, "tid": 11, "x": 38400, "y": 14100, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 38250.0, "gy": 14100.0, "gw": 750.0, "gh": 1200.0}, {"i": 165, "tid": 11, "x": 39600, "y": 14100, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 39450.0, "gy": 14100.0, "gw": 750.0, "gh": 1200.0}, {"i": 166, "tid": 11, "x": 40800, "y": 14100, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 40650.0, "gy": 14100.0, "gw": 750.0, "gh": 1200.0}, {"i": 167, "tid": 11, "x": 42000, "y": 14100, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 41850.0, "gy": 14100.0, "gw": 750.0, "gh": 1200.0}, {"i": 168, "tid": 11, "x": 43200, "y": 14100, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 43050.0, "gy": 14100.0, "gw": 750.0, "gh": 1200.0}, {"i": 169, "tid": 11, "x": 44400, "y": 14100, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 44250.0, "gy": 14100.0, "gw": 750.0, "gh": 1200.0}, {"i": 170, "tid": 11, "x": 45600, "y": 14100, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 45450.0, "gy": 14100.0, "gw": 750.0, "gh": 1200.0}, {"i": 171, "tid": 11, "x": 46800, "y": 14100, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 46650.0, "gy": 14100.0, "gw": 750.0, "gh": 1200.0}, {"i": 172, "tid": 11, "x": 48000, "y": 14100, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 47850.0, "gy": 14100.0, "gw": 750.0, "gh": 1200.0}, {"i": 173, "tid": 11, "x": 49200, "y": 14100, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 49050.0, "gy": 14100.0, "gw": 750.0, "gh": 1200.0}, {"i": 174, "tid": 11, "x": 50400, "y": 14100, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 50250.0, "gy": 14100.0, "gw": 750.0, "gh": 1200.0}, {"i": 175, "tid": 11, "x": 51600, "y": 14100, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 51450.0, "gy": 14100.0, "gw": 750.0, "gh": 1200.0}, {"i": 176, "tid": 11, "x": 52800, "y": 14100, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 52650.0, "gy": 14100.0, "gw": 750.0, "gh": 1200.0}, {"i": 177, "tid": 11, "x": 54000, "y": 14100, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 53850.0, "gy": 14100.0, "gw": 750.0, "gh": 1200.0}, {"i": 178, "tid": 11, "x": 55200, "y": 14100, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 55050.0, "gy": 14100.0, "gw": 750.0, "gh": 1200.0}, {"i": 179, "tid": 11, "x": 56400, "y": 14100, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 56250.0, "gy": 14100.0, "gw": 750.0, "gh": 1200.0}, {"i": 180, "tid": 11, "x": 57600, "y": 14100, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 57450.0, "gy": 14100.0, "gw": 750.0, "gh": 1200.0}, {"i": 181, "tid": 11, "x": 58800, "y": 14100, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 58650.0, "gy": 14100.0, "gw": 750.0, "gh": 1200.0}, {"i": 182, "tid": 3, "x": 0, "y": 15300, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 0.0, "gy": 15300.0, "gw": 4000.0, "gh": 1400.0}, {"i": 183, "tid": 2, "x": 4000, "y": 15300, "w": 3000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2500, "ld": 9, "gx": 4000.0, "gy": 15300.0, "gw": 3000.0, "gh": 1400.0}, {"i": 184, "tid": 11, "x": 7000, "y": 15300, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 7000.0, "gy": 15300.0, "gw": 750.0, "gh": 1200.0}, {"i": 185, "tid": 11, "x": 8200, "y": 15300, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 8200.0, "gy": 15300.0, "gw": 750.0, "gh": 1200.0}, {"i": 186, "tid": 11, "x": 9400, "y": 15300, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 9400.0, "gy": 15300.0, "gw": 750.0, "gh": 1200.0}, {"i": 187, "tid": 11, "x": 10600, "y": 15300, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 10600.0, "gy": 15300.0, "gw": 750.0, "gh": 1200.0}, {"i": 188, "tid": 11, "x": 11800, "y": 15300, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 11800.0, "gy": 15300.0, "gw": 750.0, "gh": 1200.0}, {"i": 189, "tid": 11, "x": 13000, "y": 15300, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 13000.0, "gy": 15300.0, "gw": 750.0, "gh": 1200.0}, {"i": 190, "tid": 3, "x": 14200, "y": 15300, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 14200.0, "gy": 15300.0, "gw": 4000.0, "gh": 1400.0}, {"i": 191, "tid": 3, "x": 18200, "y": 15300, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 18200.0, "gy": 15300.0, "gw": 4000.0, "gh": 1400.0}, {"i": 192, "tid": 2, "x": 22200, "y": 15300, "w": 3000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2500, "ld": 9, "gx": 22200.0, "gy": 15300.0, "gw": 3000.0, "gh": 1400.0}, {"i": 193, "tid": 11, "x": 25200, "y": 15300, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 25200.0, "gy": 15300.0, "gw": 750.0, "gh": 1200.0}, {"i": 194, "tid": 3, "x": 26400, "y": 15300, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 26400.0, "gy": 15300.0, "gw": 4000.0, "gh": 1400.0}, {"i": 195, "tid": 3, "x": 30400, "y": 15300, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 30400.0, "gy": 15300.0, "gw": 4000.0, "gh": 1400.0}, {"i": 196, "tid": 2, "x": 34400, "y": 15300, "w": 3000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2500, "ld": 9, "gx": 34400.0, "gy": 15300.0, "gw": 3000.0, "gh": 1400.0}, {"i": 197, "tid": 11, "x": 37400, "y": 15300, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 37400.0, "gy": 15300.0, "gw": 750.0, "gh": 1200.0}, {"i": 198, "tid": 11, "x": 38600, "y": 15300, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 38600.0, "gy": 15300.0, "gw": 750.0, "gh": 1200.0}, {"i": 199, "tid": 11, "x": 39800, "y": 15300, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 39800.0, "gy": 15300.0, "gw": 750.0, "gh": 1200.0}, {"i": 200, "tid": 11, "x": 41000, "y": 15300, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 41000.0, "gy": 15300.0, "gw": 750.0, "gh": 1200.0}, {"i": 201, "tid": 11, "x": 42200, "y": 15300, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 42200.0, "gy": 15300.0, "gw": 750.0, "gh": 1200.0}, {"i": 202, "tid": 11, "x": 43400, "y": 15300, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 43400.0, "gy": 15300.0, "gw": 750.0, "gh": 1200.0}, {"i": 203, "tid": 3, "x": 44600, "y": 15300, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 44600.0, "gy": 15300.0, "gw": 4000.0, "gh": 1400.0}, {"i": 204, "tid": 0, "x": 48600, "y": 15300, "w": 1000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 1600, "ld": 3, "gx": 48600.0, "gy": 15300.0, "gw": 1000.0, "gh": 1400.0}, {"i": 205, "tid": 11, "x": 49600, "y": 15300, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 49600.0, "gy": 15300.0, "gw": 750.0, "gh": 1200.0}, {"i": 206, "tid": 11, "x": 50800, "y": 15300, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 50800.0, "gy": 15300.0, "gw": 750.0, "gh": 1200.0}, {"i": 207, "tid": 11, "x": 52000, "y": 15300, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 52000.0, "gy": 15300.0, "gw": 750.0, "gh": 1200.0}, {"i": 208, "tid": 11, "x": 53200, "y": 15300, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 53200.0, "gy": 15300.0, "gw": 750.0, "gh": 1200.0}, {"i": 209, "tid": 11, "x": 54400, "y": 15300, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 54400.0, "gy": 15300.0, "gw": 750.0, "gh": 1200.0}, {"i": 210, "tid": 11, "x": 55600, "y": 15300, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 55600.0, "gy": 15300.0, "gw": 750.0, "gh": 1200.0}, {"i": 211, "tid": 2, "x": 56800, "y": 15300, "w": 3000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2500, "ld": 9, "gx": 56800.0, "gy": 15300.0, "gw": 3000.0, "gh": 1400.0}, {"i": 212, "tid": 11, "x": 7200, "y": 16650, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 7050.0, "gy": 16650.0, "gw": 750.0, "gh": 1200.0}, {"i": 213, "tid": 11, "x": 8400, "y": 16650, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 8250.0, "gy": 16650.0, "gw": 750.0, "gh": 1200.0}, {"i": 214, "tid": 11, "x": 10800, "y": 16650, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 10650.0, "gy": 16650.0, "gw": 750.0, "gh": 1200.0}, {"i": 215, "tid": 11, "x": 12000, "y": 16650, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 11850.0, "gy": 16650.0, "gw": 750.0, "gh": 1200.0}, {"i": 216, "tid": 11, "x": 13200, "y": 16650, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 13050.0, "gy": 16650.0, "gw": 750.0, "gh": 1200.0}, {"i": 217, "tid": 11, "x": 25200, "y": 16650, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 25050.0, "gy": 16650.0, "gw": 750.0, "gh": 1200.0}, {"i": 218, "tid": 11, "x": 37800, "y": 16650, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 37650.0, "gy": 16650.0, "gw": 750.0, "gh": 1200.0}, {"i": 219, "tid": 11, "x": 39000, "y": 16650, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 38850.0, "gy": 16650.0, "gw": 750.0, "gh": 1200.0}, {"i": 220, "tid": 11, "x": 40800, "y": 16650, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 40650.0, "gy": 16650.0, "gw": 750.0, "gh": 1200.0}, {"i": 221, "tid": 11, "x": 42000, "y": 16650, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 41850.0, "gy": 16650.0, "gw": 750.0, "gh": 1200.0}, {"i": 222, "tid": 11, "x": 43200, "y": 16650, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 43050.0, "gy": 16650.0, "gw": 750.0, "gh": 1200.0}, {"i": 223, "tid": 11, "x": 49800, "y": 16650, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 49650.0, "gy": 16650.0, "gw": 750.0, "gh": 1200.0}, {"i": 224, "tid": 11, "x": 51000, "y": 16650, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 50850.0, "gy": 16650.0, "gw": 750.0, "gh": 1200.0}, {"i": 225, "tid": 11, "x": 52200, "y": 16650, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 52050.0, "gy": 16650.0, "gw": 750.0, "gh": 1200.0}, {"i": 226, "tid": 11, "x": 53400, "y": 16650, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 53250.0, "gy": 16650.0, "gw": 750.0, "gh": 1200.0}, {"i": 227, "tid": 11, "x": 54600, "y": 16650, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 54450.0, "gy": 16650.0, "gw": 750.0, "gh": 1200.0}, {"i": 228, "tid": 2, "x": 0, "y": 17850, "w": 3000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2500, "ld": 9, "gx": 0.0, "gy": 17850.0, "gw": 3000.0, "gh": 1400.0}, {"i": 229, "tid": 3, "x": 3600, "y": 17850, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 3600.0, "gy": 17850.0, "gw": 4000.0, "gh": 1400.0}, {"i": 230, "tid": 11, "x": 7600, "y": 17850, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 7600.0, "gy": 17850.0, "gw": 750.0, "gh": 1200.0}, {"i": 231, "tid": 11, "x": 10000, "y": 17850, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 10000.0, "gy": 17850.0, "gw": 750.0, "gh": 1200.0}, {"i": 232, "tid": 11, "x": 11200, "y": 17850, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 11200.0, "gy": 17850.0, "gw": 750.0, "gh": 1200.0}, {"i": 233, "tid": 11, "x": 12400, "y": 17850, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 12400.0, "gy": 17850.0, "gw": 750.0, "gh": 1200.0}, {"i": 234, "tid": 11, "x": 13600, "y": 17850, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 13600.0, "gy": 17850.0, "gw": 750.0, "gh": 1200.0}, {"i": 235, "tid": 3, "x": 14800, "y": 17850, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 14800.0, "gy": 17850.0, "gw": 4000.0, "gh": 1400.0}, {"i": 236, "tid": 3, "x": 18800, "y": 17850, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 18800.0, "gy": 17850.0, "gw": 4000.0, "gh": 1400.0}, {"i": 237, "tid": 11, "x": 3000, "y": 19200, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 2850.0, "gy": 19200.0, "gw": 750.0, "gh": 1200.0}, {"i": 238, "tid": 11, "x": 7800, "y": 19200, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 7650.0, "gy": 19200.0, "gw": 750.0, "gh": 1200.0}, {"i": 239, "tid": 11, "x": 9000, "y": 19200, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 8850.0, "gy": 19200.0, "gw": 750.0, "gh": 1200.0}, {"i": 240, "tid": 11, "x": 10200, "y": 19200, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 10050.0, "gy": 19200.0, "gw": 750.0, "gh": 1200.0}, {"i": 241, "tid": 11, "x": 11400, "y": 19200, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 11250.0, "gy": 19200.0, "gw": 750.0, "gh": 1200.0}, {"i": 242, "tid": 11, "x": 12600, "y": 19200, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 12450.0, "gy": 19200.0, "gw": 750.0, "gh": 1200.0}, {"i": 243, "tid": 11, "x": 13800, "y": 19200, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 13650.0, "gy": 19200.0, "gw": 750.0, "gh": 1200.0}, {"i": 244, "tid": 3, "x": 0, "y": 20400, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 0.0, "gy": 20400.0, "gw": 4000.0, "gh": 1400.0}, {"i": 245, "tid": 2, "x": 4000, "y": 20400, "w": 3000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2500, "ld": 9, "gx": 4000.0, "gy": 20400.0, "gw": 3000.0, "gh": 1400.0}, {"i": 246, "tid": 11, "x": 7000, "y": 20400, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 7000.0, "gy": 20400.0, "gw": 750.0, "gh": 1200.0}, {"i": 247, "tid": 11, "x": 8200, "y": 20400, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 8200.0, "gy": 20400.0, "gw": 750.0, "gh": 1200.0}, {"i": 248, "tid": 11, "x": 9400, "y": 20400, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 9400.0, "gy": 20400.0, "gw": 750.0, "gh": 1200.0}, {"i": 249, "tid": 11, "x": 10600, "y": 20400, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 10600.0, "gy": 20400.0, "gw": 750.0, "gh": 1200.0}, {"i": 250, "tid": 11, "x": 11800, "y": 20400, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 11800.0, "gy": 20400.0, "gw": 750.0, "gh": 1200.0}, {"i": 251, "tid": 11, "x": 13000, "y": 20400, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 13000.0, "gy": 20400.0, "gw": 750.0, "gh": 1200.0}, {"i": 252, "tid": 3, "x": 14200, "y": 20400, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 14200.0, "gy": 20400.0, "gw": 4000.0, "gh": 1400.0}, {"i": 253, "tid": 3, "x": 18200, "y": 20400, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 18200.0, "gy": 20400.0, "gw": 4000.0, "gh": 1400.0}, {"i": 254, "tid": 11, "x": 8400, "y": 21750, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 8250.0, "gy": 21750.0, "gw": 750.0, "gh": 1200.0}, {"i": 255, "tid": 11, "x": 9600, "y": 21750, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 9450.0, "gy": 21750.0, "gw": 750.0, "gh": 1200.0}, {"i": 256, "tid": 11, "x": 10800, "y": 21750, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 10650.0, "gy": 21750.0, "gw": 750.0, "gh": 1200.0}, {"i": 257, "tid": 11, "x": 12000, "y": 21750, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 11850.0, "gy": 21750.0, "gw": 750.0, "gh": 1200.0}, {"i": 258, "tid": 11, "x": 13200, "y": 21750, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 13050.0, "gy": 21750.0, "gw": 750.0, "gh": 1200.0}, {"i": 259, "tid": 11, "x": 8000, "y": 22950, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 8000.0, "gy": 22950.0, "gw": 750.0, "gh": 1200.0}, {"i": 260, "tid": 11, "x": 9200, "y": 22950, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 9200.0, "gy": 22950.0, "gw": 750.0, "gh": 1200.0}, {"i": 261, "tid": 11, "x": 10400, "y": 22950, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 10400.0, "gy": 22950.0, "gw": 750.0, "gh": 1200.0}, {"i": 262, "tid": 11, "x": 11600, "y": 22950, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 11600.0, "gy": 22950.0, "gw": 750.0, "gh": 1200.0}, {"i": 263, "tid": 11, "x": 12800, "y": 22950, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 12800.0, "gy": 22950.0, "gw": 750.0, "gh": 1200.0}, {"i": 264, "tid": 3, "x": 14000, "y": 22950, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 14000.0, "gy": 22950.0, "gw": 4000.0, "gh": 1400.0}, {"i": 265, "tid": 3, "x": 18000, "y": 22950, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 18000.0, "gy": 22950.0, "gw": 4000.0, "gh": 1400.0}, {"i": 266, "tid": 11, "x": 8600, "y": 24300, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 8450.0, "gy": 24300.0, "gw": 750.0, "gh": 1200.0}, {"i": 267, "tid": 11, "x": 9800, "y": 24300, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 9650.0, "gy": 24300.0, "gw": 750.0, "gh": 1200.0}, {"i": 268, "tid": 11, "x": 12200, "y": 24300, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 12050.0, "gy": 24300.0, "gw": 750.0, "gh": 1200.0}, {"i": 269, "tid": 11, "x": 13400, "y": 24300, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 13250.0, "gy": 24300.0, "gw": 750.0, "gh": 1200.0}, {"i": 270, "tid": 11, "x": 8000, "y": 25500, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 8000.0, "gy": 25500.0, "gw": 750.0, "gh": 1200.0}, {"i": 271, "tid": 11, "x": 9200, "y": 25500, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 9200.0, "gy": 25500.0, "gw": 750.0, "gh": 1200.0}, {"i": 272, "tid": 11, "x": 10400, "y": 25500, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 10400.0, "gy": 25500.0, "gw": 750.0, "gh": 1200.0}, {"i": 273, "tid": 11, "x": 11600, "y": 25500, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 11600.0, "gy": 25500.0, "gw": 750.0, "gh": 1200.0}, {"i": 274, "tid": 11, "x": 12800, "y": 25500, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 12800.0, "gy": 25500.0, "gw": 750.0, "gh": 1200.0}, {"i": 275, "tid": 3, "x": 14000, "y": 25500, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 14000.0, "gy": 25500.0, "gw": 4000.0, "gh": 1400.0}, {"i": 276, "tid": 11, "x": 8600, "y": 26850, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 8450.0, "gy": 26850.0, "gw": 750.0, "gh": 1200.0}, {"i": 277, "tid": 11, "x": 9800, "y": 26850, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 9650.0, "gy": 26850.0, "gw": 750.0, "gh": 1200.0}, {"i": 278, "tid": 11, "x": 11000, "y": 26850, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 10850.0, "gy": 26850.0, "gw": 750.0, "gh": 1200.0}, {"i": 279, "tid": 11, "x": 12200, "y": 26850, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 12050.0, "gy": 26850.0, "gw": 750.0, "gh": 1200.0}, {"i": 280, "tid": 11, "x": 13400, "y": 26850, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 13250.0, "gy": 26850.0, "gw": 750.0, "gh": 1200.0}, {"i": 281, "tid": 1, "x": 18200, "y": 26850, "w": 2000, "d": 1200, "rot": 180, "h": 2800, "gap": 200, "pr": 2100, "ld": 6, "gx": 18200.0, "gy": 26650.0, "gw": 2000.0, "gh": 1400.0}, {"i": 282, "tid": 11, "x": 8000, "y": 28050, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 8000.0, "gy": 28050.0, "gw": 750.0, "gh": 1200.0}, {"i": 283, "tid": 11, "x": 9200, "y": 28050, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 9200.0, "gy": 28050.0, "gw": 750.0, "gh": 1200.0}, {"i": 284, "tid": 11, "x": 10400, "y": 28050, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 10400.0, "gy": 28050.0, "gw": 750.0, "gh": 1200.0}, {"i": 285, "tid": 11, "x": 11600, "y": 28050, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 11600.0, "gy": 28050.0, "gw": 750.0, "gh": 1200.0}, {"i": 286, "tid": 11, "x": 12800, "y": 28050, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 12800.0, "gy": 28050.0, "gw": 750.0, "gh": 1200.0}, {"i": 287, "tid": 3, "x": 14000, "y": 28050, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 14000.0, "gy": 28050.0, "gw": 4000.0, "gh": 1400.0}, {"i": 288, "tid": 3, "x": 18000, "y": 28050, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 18000.0, "gy": 28050.0, "gw": 4000.0, "gh": 1400.0}, {"i": 289, "tid": 11, "x": 8400, "y": 29400, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 8250.0, "gy": 29400.0, "gw": 750.0, "gh": 1200.0}, {"i": 290, "tid": 11, "x": 9600, "y": 29400, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 9450.0, "gy": 29400.0, "gw": 750.0, "gh": 1200.0}, {"i": 291, "tid": 11, "x": 10800, "y": 29400, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 10650.0, "gy": 29400.0, "gw": 750.0, "gh": 1200.0}, {"i": 292, "tid": 11, "x": 12000, "y": 29400, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 11850.0, "gy": 29400.0, "gw": 750.0, "gh": 1200.0}, {"i": 293, "tid": 11, "x": 13200, "y": 29400, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 13050.0, "gy": 29400.0, "gw": 750.0, "gh": 1200.0}, {"i": 294, "tid": 3, "x": 0, "y": 30600, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 0.0, "gy": 30600.0, "gw": 4000.0, "gh": 1400.0}, {"i": 295, "tid": 2, "x": 4000, "y": 30600, "w": 3000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2500, "ld": 9, "gx": 4000.0, "gy": 30600.0, "gw": 3000.0, "gh": 1400.0}, {"i": 296, "tid": 11, "x": 7000, "y": 30600, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 7000.0, "gy": 30600.0, "gw": 750.0, "gh": 1200.0}, {"i": 297, "tid": 11, "x": 8200, "y": 30600, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 8200.0, "gy": 30600.0, "gw": 750.0, "gh": 1200.0}, {"i": 298, "tid": 11, "x": 9400, "y": 30600, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 9400.0, "gy": 30600.0, "gw": 750.0, "gh": 1200.0}, {"i": 299, "tid": 11, "x": 10600, "y": 30600, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 10600.0, "gy": 30600.0, "gw": 750.0, "gh": 1200.0}, {"i": 300, "tid": 11, "x": 11800, "y": 30600, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 11800.0, "gy": 30600.0, "gw": 750.0, "gh": 1200.0}, {"i": 301, "tid": 11, "x": 13000, "y": 30600, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 13000.0, "gy": 30600.0, "gw": 750.0, "gh": 1200.0}, {"i": 302, "tid": 3, "x": 14200, "y": 30600, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 14200.0, "gy": 30600.0, "gw": 4000.0, "gh": 1400.0}, {"i": 303, "tid": 3, "x": 18200, "y": 30600, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 18200.0, "gy": 30600.0, "gw": 4000.0, "gh": 1400.0}, {"i": 304, "tid": 11, "x": 7200, "y": 31950, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 7050.0, "gy": 31950.0, "gw": 750.0, "gh": 1200.0}, {"i": 305, "tid": 11, "x": 8400, "y": 31950, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 8250.0, "gy": 31950.0, "gw": 750.0, "gh": 1200.0}, {"i": 306, "tid": 11, "x": 9600, "y": 31950, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 9450.0, "gy": 31950.0, "gw": 750.0, "gh": 1200.0}, {"i": 307, "tid": 11, "x": 10800, "y": 31950, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 10650.0, "gy": 31950.0, "gw": 750.0, "gh": 1200.0}, {"i": 308, "tid": 11, "x": 12000, "y": 31950, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 11850.0, "gy": 31950.0, "gw": 750.0, "gh": 1200.0}, {"i": 309, "tid": 11, "x": 13200, "y": 31950, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 13050.0, "gy": 31950.0, "gw": 750.0, "gh": 1200.0}, {"i": 310, "tid": 2, "x": 0, "y": 33150, "w": 3000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2500, "ld": 9, "gx": 0.0, "gy": 33150.0, "gw": 3000.0, "gh": 1400.0}, {"i": 311, "tid": 3, "x": 3600, "y": 33150, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 3600.0, "gy": 33150.0, "gw": 4000.0, "gh": 1400.0}, {"i": 312, "tid": 11, "x": 7600, "y": 33150, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 7600.0, "gy": 33150.0, "gw": 750.0, "gh": 1200.0}, {"i": 313, "tid": 11, "x": 8800, "y": 33150, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 8800.0, "gy": 33150.0, "gw": 750.0, "gh": 1200.0}, {"i": 314, "tid": 11, "x": 10000, "y": 33150, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 10000.0, "gy": 33150.0, "gw": 750.0, "gh": 1200.0}, {"i": 315, "tid": 11, "x": 11200, "y": 33150, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 11200.0, "gy": 33150.0, "gw": 750.0, "gh": 1200.0}, {"i": 316, "tid": 11, "x": 12400, "y": 33150, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 12400.0, "gy": 33150.0, "gw": 750.0, "gh": 1200.0}, {"i": 317, "tid": 11, "x": 13600, "y": 33150, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 13600.0, "gy": 33150.0, "gw": 750.0, "gh": 1200.0}, {"i": 318, "tid": 2, "x": 14800, "y": 33150, "w": 3000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2500, "ld": 9, "gx": 14800.0, "gy": 33150.0, "gw": 3000.0, "gh": 1400.0}, {"i": 319, "tid": 3, "x": 18500, "y": 33150, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 18500.0, "gy": 33150.0, "gw": 4000.0, "gh": 1400.0}, {"i": 320, "tid": 11, "x": 3000, "y": 34500, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 2850.0, "gy": 34500.0, "gw": 750.0, "gh": 1200.0}, {"i": 321, "tid": 11, "x": 7800, "y": 34500, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 7650.0, "gy": 34500.0, "gw": 750.0, "gh": 1200.0}, {"i": 322, "tid": 11, "x": 9000, "y": 34500, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 8850.0, "gy": 34500.0, "gw": 750.0, "gh": 1200.0}, {"i": 323, "tid": 11, "x": 10200, "y": 34500, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 10050.0, "gy": 34500.0, "gw": 750.0, "gh": 1200.0}, {"i": 324, "tid": 11, "x": 12000, "y": 34500, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 11850.0, "gy": 34500.0, "gw": 750.0, "gh": 1200.0}, {"i": 325, "tid": 11, "x": 13200, "y": 34500, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 13050.0, "gy": 34500.0, "gw": 750.0, "gh": 1200.0}, {"i": 326, "tid": 3, "x": 0, "y": 35700, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 0.0, "gy": 35700.0, "gw": 4000.0, "gh": 1400.0}, {"i": 327, "tid": 2, "x": 4000, "y": 35700, "w": 3000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2500, "ld": 9, "gx": 4000.0, "gy": 35700.0, "gw": 3000.0, "gh": 1400.0}, {"i": 328, "tid": 11, "x": 7000, "y": 35700, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 7000.0, "gy": 35700.0, "gw": 750.0, "gh": 1200.0}, {"i": 329, "tid": 11, "x": 8200, "y": 35700, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 8200.0, "gy": 35700.0, "gw": 750.0, "gh": 1200.0}, {"i": 330, "tid": 11, "x": 9400, "y": 35700, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 9400.0, "gy": 35700.0, "gw": 750.0, "gh": 1200.0}, {"i": 331, "tid": 11, "x": 10600, "y": 35700, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 10600.0, "gy": 35700.0, "gw": 750.0, "gh": 1200.0}, {"i": 332, "tid": 11, "x": 11800, "y": 35700, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 11800.0, "gy": 35700.0, "gw": 750.0, "gh": 1200.0}, {"i": 333, "tid": 11, "x": 13000, "y": 35700, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 13000.0, "gy": 35700.0, "gw": 750.0, "gh": 1200.0}, {"i": 334, "tid": 2, "x": 14200, "y": 35700, "w": 3000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2500, "ld": 9, "gx": 14200.0, "gy": 35700.0, "gw": 3000.0, "gh": 1400.0}, {"i": 335, "tid": 11, "x": 17200, "y": 35700, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 17200.0, "gy": 35700.0, "gw": 750.0, "gh": 1200.0}, {"i": 336, "tid": 3, "x": 19000, "y": 35700, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 19000.0, "gy": 35700.0, "gw": 4000.0, "gh": 1400.0}, {"i": 337, "tid": 11, "x": 7200, "y": 37050, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 7050.0, "gy": 37050.0, "gw": 750.0, "gh": 1200.0}, {"i": 338, "tid": 11, "x": 8400, "y": 37050, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 8250.0, "gy": 37050.0, "gw": 750.0, "gh": 1200.0}, {"i": 339, "tid": 11, "x": 9600, "y": 37050, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 9450.0, "gy": 37050.0, "gw": 750.0, "gh": 1200.0}, {"i": 340, "tid": 11, "x": 10800, "y": 37050, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 10650.0, "gy": 37050.0, "gw": 750.0, "gh": 1200.0}, {"i": 341, "tid": 11, "x": 12000, "y": 37050, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 11850.0, "gy": 37050.0, "gw": 750.0, "gh": 1200.0}, {"i": 342, "tid": 11, "x": 13200, "y": 37050, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 13050.0, "gy": 37050.0, "gw": 750.0, "gh": 1200.0}, {"i": 343, "tid": 11, "x": 17400, "y": 37050, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 17250.0, "gy": 37050.0, "gw": 750.0, "gh": 1200.0}, {"i": 344, "tid": 0, "x": 18000, "y": 37050, "w": 1000, "d": 1200, "rot": 180, "h": 2800, "gap": 200, "pr": 1600, "ld": 3, "gx": 18000.0, "gy": 36850.0, "gw": 1000.0, "gh": 1400.0}, {"i": 345, "tid": 3, "x": 0, "y": 38250, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 0.0, "gy": 38250.0, "gw": 4000.0, "gh": 1400.0}, {"i": 346, "tid": 2, "x": 4000, "y": 38250, "w": 3000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2500, "ld": 9, "gx": 4000.0, "gy": 38250.0, "gw": 3000.0, "gh": 1400.0}, {"i": 347, "tid": 11, "x": 7000, "y": 38250, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 7000.0, "gy": 38250.0, "gw": 750.0, "gh": 1200.0}, {"i": 348, "tid": 11, "x": 8200, "y": 38250, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 8200.0, "gy": 38250.0, "gw": 750.0, "gh": 1200.0}, {"i": 349, "tid": 11, "x": 9400, "y": 38250, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 9400.0, "gy": 38250.0, "gw": 750.0, "gh": 1200.0}, {"i": 350, "tid": 11, "x": 10600, "y": 38250, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 10600.0, "gy": 38250.0, "gw": 750.0, "gh": 1200.0}, {"i": 351, "tid": 11, "x": 11800, "y": 38250, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 11800.0, "gy": 38250.0, "gw": 750.0, "gh": 1200.0}, {"i": 352, "tid": 11, "x": 13000, "y": 38250, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 13000.0, "gy": 38250.0, "gw": 750.0, "gh": 1200.0}, {"i": 353, "tid": 3, "x": 14200, "y": 38250, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 14200.0, "gy": 38250.0, "gw": 4000.0, "gh": 1400.0}, {"i": 354, "tid": 2, "x": 18200, "y": 38250, "w": 3000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2500, "ld": 9, "gx": 18200.0, "gy": 38250.0, "gw": 3000.0, "gh": 1400.0}, {"i": 355, "tid": 11, "x": 21200, "y": 38250, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 21200.0, "gy": 38250.0, "gw": 750.0, "gh": 1200.0}, {"i": 356, "tid": 11, "x": 7200, "y": 39600, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 7050.0, "gy": 39600.0, "gw": 750.0, "gh": 1200.0}, {"i": 357, "tid": 11, "x": 8400, "y": 39600, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 8250.0, "gy": 39600.0, "gw": 750.0, "gh": 1200.0}, {"i": 358, "tid": 11, "x": 9600, "y": 39600, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 9450.0, "gy": 39600.0, "gw": 750.0, "gh": 1200.0}, {"i": 359, "tid": 11, "x": 10800, "y": 39600, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 10650.0, "gy": 39600.0, "gw": 750.0, "gh": 1200.0}, {"i": 360, "tid": 11, "x": 12000, "y": 39600, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 11850.0, "gy": 39600.0, "gw": 750.0, "gh": 1200.0}, {"i": 361, "tid": 11, "x": 13200, "y": 39600, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 13050.0, "gy": 39600.0, "gw": 750.0, "gh": 1200.0}, {"i": 362, "tid": 3, "x": 0, "y": 40800, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 0.0, "gy": 40800.0, "gw": 4000.0, "gh": 1400.0}, {"i": 363, "tid": 2, "x": 4000, "y": 40800, "w": 3000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2500, "ld": 9, "gx": 4000.0, "gy": 40800.0, "gw": 3000.0, "gh": 1400.0}, {"i": 364, "tid": 11, "x": 7000, "y": 40800, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 7000.0, "gy": 40800.0, "gw": 750.0, "gh": 1200.0}, {"i": 365, "tid": 11, "x": 8200, "y": 40800, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 8200.0, "gy": 40800.0, "gw": 750.0, "gh": 1200.0}, {"i": 366, "tid": 11, "x": 9400, "y": 40800, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 9400.0, "gy": 40800.0, "gw": 750.0, "gh": 1200.0}, {"i": 367, "tid": 11, "x": 10600, "y": 40800, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 10600.0, "gy": 40800.0, "gw": 750.0, "gh": 1200.0}, {"i": 368, "tid": 11, "x": 11800, "y": 40800, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 11800.0, "gy": 40800.0, "gw": 750.0, "gh": 1200.0}, {"i": 369, "tid": 11, "x": 13000, "y": 40800, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 13000.0, "gy": 40800.0, "gw": 750.0, "gh": 1200.0}, {"i": 370, "tid": 3, "x": 14200, "y": 40800, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 14200.0, "gy": 40800.0, "gw": 4000.0, "gh": 1400.0}, {"i": 371, "tid": 2, "x": 18200, "y": 40800, "w": 3000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2500, "ld": 9, "gx": 18200.0, "gy": 40800.0, "gw": 3000.0, "gh": 1400.0}, {"i": 372, "tid": 11, "x": 21200, "y": 40800, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 21200.0, "gy": 40800.0, "gw": 750.0, "gh": 1200.0}, {"i": 373, "tid": 11, "x": 7200, "y": 42150, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 7050.0, "gy": 42150.0, "gw": 750.0, "gh": 1200.0}, {"i": 374, "tid": 11, "x": 8400, "y": 42150, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 8250.0, "gy": 42150.0, "gw": 750.0, "gh": 1200.0}, {"i": 375, "tid": 11, "x": 9600, "y": 42150, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 9450.0, "gy": 42150.0, "gw": 750.0, "gh": 1200.0}, {"i": 376, "tid": 11, "x": 10800, "y": 42150, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 10650.0, "gy": 42150.0, "gw": 750.0, "gh": 1200.0}, {"i": 377, "tid": 11, "x": 12000, "y": 42150, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 11850.0, "gy": 42150.0, "gw": 750.0, "gh": 1200.0}, {"i": 378, "tid": 11, "x": 13200, "y": 42150, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 13050.0, "gy": 42150.0, "gw": 750.0, "gh": 1200.0}, {"i": 379, "tid": 3, "x": 0, "y": 43350, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 0.0, "gy": 43350.0, "gw": 4000.0, "gh": 1400.0}, {"i": 380, "tid": 2, "x": 4000, "y": 43350, "w": 3000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2500, "ld": 9, "gx": 4000.0, "gy": 43350.0, "gw": 3000.0, "gh": 1400.0}, {"i": 381, "tid": 11, "x": 7000, "y": 43350, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 7000.0, "gy": 43350.0, "gw": 750.0, "gh": 1200.0}, {"i": 382, "tid": 11, "x": 8200, "y": 43350, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 8200.0, "gy": 43350.0, "gw": 750.0, "gh": 1200.0}, {"i": 383, "tid": 11, "x": 9400, "y": 43350, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 9400.0, "gy": 43350.0, "gw": 750.0, "gh": 1200.0}, {"i": 384, "tid": 11, "x": 10600, "y": 43350, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 10600.0, "gy": 43350.0, "gw": 750.0, "gh": 1200.0}, {"i": 385, "tid": 11, "x": 11800, "y": 43350, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 11800.0, "gy": 43350.0, "gw": 750.0, "gh": 1200.0}, {"i": 386, "tid": 11, "x": 13000, "y": 43350, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 13000.0, "gy": 43350.0, "gw": 750.0, "gh": 1200.0}, {"i": 387, "tid": 3, "x": 14200, "y": 43350, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 14200.0, "gy": 43350.0, "gw": 4000.0, "gh": 1400.0}, {"i": 388, "tid": 2, "x": 18200, "y": 43350, "w": 3000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2500, "ld": 9, "gx": 18200.0, "gy": 43350.0, "gw": 3000.0, "gh": 1400.0}, {"i": 389, "tid": 11, "x": 21200, "y": 43350, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 21200.0, "gy": 43350.0, "gw": 750.0, "gh": 1200.0}, {"i": 390, "tid": 9, "x": 31000, "y": 41950, "w": 4500, "d": 1500, "rot": 0, "h": 3200, "gap": 300, "pr": 4000, "ld": 15, "gx": 31000.0, "gy": 41950.0, "gw": 4500.0, "gh": 1800.0}, {"i": 391, "tid": 9, "x": 34100, "y": 29800, "w": 1500, "d": 4500, "rot": 90, "h": 3200, "gap": 300, "pr": 4000, "ld": 15, "gx": 33800.0, "gy": 29800.0, "gw": 1800.0, "gh": 4500.0}, {"i": 392, "tid": 9, "x": 46150, "y": 40450, "w": 1500, "d": 4500, "rot": 270, "h": 3200, "gap": 300, "pr": 4000, "ld": 15, "gx": 46150.0, "gy": 40450.0, "gw": 1800.0, "gh": 4500.0}, {"i": 393, "tid": 9, "x": 31750, "y": 27800, "w": 4500, "d": 1500, "rot": 0, "h": 3200, "gap": 300, "pr": 4000, "ld": 15, "gx": 31750.0, "gy": 27800.0, "gw": 4500.0, "gh": 1800.0}, {"i": 394, "tid": 9, "x": 30350, "y": 21550, "w": 1500, "d": 4500, "rot": 270, "h": 3200, "gap": 300, "pr": 4000, "ld": 15, "gx": 30350.0, "gy": 21550.0, "gw": 1800.0, "gh": 4500.0}, {"i": 395, "tid": 9, "x": 58450, "y": 23950, "w": 1500, "d": 4500, "rot": 90, "h": 3200, "gap": 300, "pr": 4000, "ld": 15, "gx": 58150.0, "gy": 23950.0, "gw": 1800.0, "gh": 4500.0}, {"i": 396, "tid": 9, "x": 30550, "y": 32800, "w": 1500, "d": 4500, "rot": 90, "h": 3200, "gap": 300, "pr": 4000, "ld": 15, "gx": 30250.0, "gy": 32800.0, "gw": 1800.0, "gh": 4500.0}, {"i": 397, "tid": 9, "x": 32650, "y": 21700, "w": 4500, "d": 1500, "rot": 180, "h": 3200, "gap": 300, "pr": 4000, "ld": 15, "gx": 32650.0, "gy": 21400.0, "gw": 4500.0, "gh": 1800.0}, {"i": 398, "tid": 9, "x": 33350, "y": 35050, "w": 1500, "d": 4500, "rot": 270, "h": 3200, "gap": 300, "pr": 4000, "ld": 15, "gx": 33350.0, "gy": 35050.0, "gw": 1800.0, "gh": 4500.0}, {"i": 399, "tid": 9, "x": 32800, "y": 25800, "w": 4500, "d": 1500, "rot": 0, "h": 3200, "gap": 300, "pr": 4000, "ld": 15, "gx": 32800.0, "gy": 25800.0, "gw": 4500.0, "gh": 1800.0}, {"i": 400, "tid": 9, "x": 32100, "y": 18150, "w": 4500, "d": 1500, "rot": 0, "h": 3200, "gap": 300, "pr": 4000, "ld": 15, "gx": 32100.0, "gy": 18150.0, "gw": 4500.0, "gh": 1800.0}, {"i": 401, "tid": 9, "x": 45150, "y": 35600, "w": 1500, "d": 4500, "rot": 270, "h": 3200, "gap": 300, "pr": 4000, "ld": 15, "gx": 45150.0, "gy": 35600.0, "gw": 1800.0, "gh": 4500.0}, {"i": 402, "tid": 9, "x": 57400, "y": 18750, "w": 1500, "d": 4500, "rot": 270, "h": 3200, "gap": 300, "pr": 4000, "ld": 15, "gx": 57400.0, "gy": 18750.0, "gw": 1800.0, "gh": 4500.0}, {"i": 403, "tid": 9, "x": 44850, "y": 18300, "w": 4500, "d": 1500, "rot": 180, "h": 3200, "gap": 300, "pr": 4000, "ld": 15, "gx": 44850.0, "gy": 18000.0, "gw": 4500.0, "gh": 1800.0}, {"i": 404, "tid": 9, "x": 31300, "y": 40100, "w": 4500, "d": 1500, "rot": 0, "h": 3200, "gap": 300, "pr": 4000, "ld": 15, "gx": 31300.0, "gy": 40100.0, "gw": 4500.0, "gh": 1800.0}, {"i": 405, "tid": 9, "x": 36050, "y": 30300, "w": 1500, "d": 4500, "rot": 90, "h": 3200, "gap": 300, "pr": 4000, "ld": 15, "gx": 35750.0, "gy": 30300.0, "gw": 1800.0, "gh": 4500.0}, {"i": 406, "tid": 9, "x": 56550, "y": 24550, "w": 1500, "d": 4500, "rot": 90, "h": 3200, "gap": 300, "pr": 4000, "ld": 15, "gx": 56250.0, "gy": 24550.0, "gw": 1800.0, "gh": 4500.0}, {"i": 407, "tid": 9, "x": 32150, "y": 23950, "w": 4500, "d": 1500, "rot": 180, "h": 3200, "gap": 300, "pr": 4000, "ld": 15, "gx": 32150.0, "gy": 23650.0, "gw": 4500.0, "gh": 1800.0}, {"i": 408, "tid": 9, "x": 36500, "y": 37050, "w": 1500, "d": 4500, "rot": 270, "h": 3200, "gap": 300, "pr": 4000, "ld": 15, "gx": 36500.0, "gy": 37050.0, "gw": 1800.0, "gh": 4500.0}, {"i": 409, "tid": 9, "x": 32200, "y": 30000, "w": 1500, "d": 4500, "rot": 270, "h": 3200, "gap": 300, "pr": 4000, "ld": 15, "gx": 32200.0, "gy": 30000.0, "gw": 1800.0, "gh": 4500.0}, {"i": 410, "tid": 9, "x": 30250, "y": 27600, "w": 1500, "d": 4500, "rot": 90, "h": 3200, "gap": 300, "pr": 4000, "ld": 15, "gx": 29950.0, "gy": 27600.0, "gw": 1800.0, "gh": 4500.0}, {"i": 411, "tid": 9, "x": 44300, "y": 20000, "w": 4500, "d": 1500, "rot": 0, "h": 3200, "gap": 300, "pr": 4000, "ld": 15, "gx": 44300.0, "gy": 20000.0, "gw": 4500.0, "gh": 1800.0}, {"i": 412, "tid": 9, "x": 47450, "y": 34000, "w": 1500, "d": 4500, "rot": 90, "h": 3200, "gap": 300, "pr": 4000, "ld": 15, "gx": 47150.0, "gy": 34000.0, "gw": 1800.0, "gh": 4500.0}, {"i": 413, "tid": 3, "x": 27450, "y": 27150, "w": 1200, "d": 4000, "rot": 270, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 27450.0, "gy": 27150.0, "gw": 1400.0, "gh": 4000.0}, {"i": 414, "tid": 3, "x": 23300, "y": 27800, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 23300.0, "gy": 27800.0, "gw": 4000.0, "gh": 1400.0}, {"i": 415, "tid": 3, "x": 24850, "y": 20300, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 24850.0, "gy": 20300.0, "gw": 4000.0, "gh": 1400.0}, {"i": 416, "tid": 3, "x": 23650, "y": 20700, "w": 1200, "d": 4000, "rot": 90, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 23450.0, "gy": 20700.0, "gw": 1400.0, "gh": 4000.0}, {"i": 417, "tid": 3, "x": 26350, "y": 23000, "w": 1200, "d": 4000, "rot": 270, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 26350.0, "gy": 23000.0, "gw": 1400.0, "gh": 4000.0}, {"i": 418, "tid": 3, "x": 25550, "y": 35650, "w": 4000, "d": 1200, "rot": 180, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 25550.0, "gy": 35450.0, "gw": 4000.0, "gh": 1400.0}, {"i": 419, "tid": 3, "x": 25000, "y": 29850, "w": 1200, "d": 4000, "rot": 90, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 24800.0, "gy": 29850.0, "gw": 1400.0, "gh": 4000.0}, {"i": 420, "tid": 3, "x": 23600, "y": 31950, "w": 1200, "d": 4000, "rot": 270, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 23600.0, "gy": 31950.0, "gw": 1400.0, "gh": 4000.0}, {"i": 421, "tid": 3, "x": 26200, "y": 33250, "w": 4000, "d": 1200, "rot": 180, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 26200.0, "gy": 33050.0, "gw": 4000.0, "gh": 1400.0}, {"i": 422, "tid": 3, "x": 28150, "y": 22200, "w": 1200, "d": 4000, "rot": 90, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 27950.0, "gy": 22200.0, "gw": 1400.0, "gh": 4000.0}, {"i": 423, "tid": 3, "x": 21050, "y": 25400, "w": 4000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 21050.0, "gy": 25400.0, "gw": 4000.0, "gh": 1400.0}, {"i": 424, "tid": 3, "x": 30700, "y": 43800, "w": 4000, "d": 1200, "rot": 180, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 30700.0, "gy": 43600.0, "gw": 4000.0, "gh": 1400.0}, {"i": 425, "tid": 3, "x": 32750, "y": 20150, "w": 4000, "d": 1200, "rot": 180, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 32750.0, "gy": 19950.0, "gw": 4000.0, "gh": 1400.0}, {"i": 426, "tid": 3, "x": 56000, "y": 18350, "w": 1200, "d": 4000, "rot": 270, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 56000.0, "gy": 18350.0, "gw": 1400.0, "gh": 4000.0}, {"i": 427, "tid": 3, "x": 27200, "y": 17900, "w": 4000, "d": 1200, "rot": 180, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 27200.0, "gy": 17700.0, "gw": 4000.0, "gh": 1400.0}, {"i": 428, "tid": 3, "x": 22200, "y": 19400, "w": 1200, "d": 4000, "rot": 270, "h": 2800, "gap": 200, "pr": 2900, "ld": 12, "gx": 22200.0, "gy": 19400.0, "gw": 1400.0, "gh": 4000.0}, {"i": 429, "tid": 8, "x": 35700, "y": 42000, "w": 1500, "d": 3000, "rot": 270, "h": 3200, "gap": 300, "pr": 3200, "ld": 10, "gx": 35700.0, "gy": 42000.0, "gw": 1800.0, "gh": 3000.0}, {"i": 430, "tid": 8, "x": 30050, "y": 37400, "w": 3000, "d": 1500, "rot": 0, "h": 3200, "gap": 300, "pr": 3200, "ld": 10, "gx": 30050.0, "gy": 37400.0, "gw": 3000.0, "gh": 1800.0}, {"i": 431, "tid": 8, "x": 44150, "y": 42000, "w": 1500, "d": 3000, "rot": 270, "h": 3200, "gap": 300, "pr": 3200, "ld": 10, "gx": 44150.0, "gy": 42000.0, "gw": 1800.0, "gh": 3000.0}, {"i": 432, "tid": 2, "x": 26250, "y": 31650, "w": 3000, "d": 1200, "rot": 180, "h": 2800, "gap": 200, "pr": 2500, "ld": 9, "gx": 26250.0, "gy": 31450.0, "gw": 3000.0, "gh": 1400.0}, {"i": 433, "tid": 2, "x": 25100, "y": 22300, "w": 1200, "d": 3000, "rot": 90, "h": 2800, "gap": 200, "pr": 2500, "ld": 9, "gx": 24900.0, "gy": 22300.0, "gw": 1400.0, "gh": 3000.0}, {"i": 434, "tid": 2, "x": 22950, "y": 18000, "w": 3000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2500, "ld": 9, "gx": 22950.0, "gy": 18000.0, "gw": 3000.0, "gh": 1400.0}, {"i": 435, "tid": 2, "x": 29600, "y": 26350, "w": 3000, "d": 1200, "rot": 180, "h": 2800, "gap": 200, "pr": 2500, "ld": 9, "gx": 29600.0, "gy": 26150.0, "gw": 3000.0, "gh": 1400.0}, {"i": 436, "tid": 2, "x": 44000, "y": 34400, "w": 3000, "d": 1200, "rot": 180, "h": 2800, "gap": 200, "pr": 2500, "ld": 9, "gx": 44000.0, "gy": 34200.0, "gw": 3000.0, "gh": 1400.0}, {"i": 437, "tid": 2, "x": 36750, "y": 18050, "w": 1200, "d": 3000, "rot": 270, "h": 2800, "gap": 200, "pr": 2500, "ld": 9, "gx": 36750.0, "gy": 18050.0, "gw": 1400.0, "gh": 3000.0}, {"i": 438, "tid": 2, "x": 22200, "y": 29750, "w": 1200, "d": 3000, "rot": 270, "h": 2800, "gap": 200, "pr": 2500, "ld": 9, "gx": 22200.0, "gy": 29750.0, "gw": 1400.0, "gh": 3000.0}, {"i": 439, "tid": 2, "x": 35150, "y": 34950, "w": 1200, "d": 3000, "rot": 90, "h": 2800, "gap": 200, "pr": 2500, "ld": 9, "gx": 34950.0, "gy": 34950.0, "gw": 1400.0, "gh": 3000.0}, {"i": 440, "tid": 6, "x": 42200, "y": 18650, "w": 800, "d": 3000, "rot": 270, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 42200.0, "gy": 18650.0, "gw": 950.0, "gh": 3000.0}, {"i": 441, "tid": 6, "x": 40250, "y": 19450, "w": 800, "d": 3000, "rot": 270, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 40250.0, "gy": 19450.0, "gw": 950.0, "gh": 3000.0}, {"i": 442, "tid": 6, "x": 39450, "y": 39450, "w": 3000, "d": 800, "rot": 0, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 39450.0, "gy": 39450.0, "gw": 3000.0, "gh": 950.0}, {"i": 443, "tid": 6, "x": 37750, "y": 24400, "w": 3000, "d": 800, "rot": 0, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 37750.0, "gy": 24400.0, "gw": 3000.0, "gh": 950.0}, {"i": 444, "tid": 6, "x": 41300, "y": 28800, "w": 800, "d": 3000, "rot": 90, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 41150.0, "gy": 28800.0, "gw": 950.0, "gh": 3000.0}, {"i": 445, "tid": 6, "x": 39850, "y": 42300, "w": 3000, "d": 800, "rot": 180, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 39850.0, "gy": 42150.0, "gw": 3000.0, "gh": 950.0}, {"i": 446, "tid": 6, "x": 38800, "y": 34950, "w": 800, "d": 3000, "rot": 270, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 38800.0, "gy": 34950.0, "gw": 950.0, "gh": 3000.0}, {"i": 447, "tid": 6, "x": 42150, "y": 24300, "w": 800, "d": 3000, "rot": 90, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 42000.0, "gy": 24300.0, "gw": 950.0, "gh": 3000.0}, {"i": 448, "tid": 6, "x": 39900, "y": 33800, "w": 800, "d": 3000, "rot": 270, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 39900.0, "gy": 33800.0, "gw": 950.0, "gh": 3000.0}, {"i": 449, "tid": 6, "x": 39700, "y": 43400, "w": 3000, "d": 800, "rot": 180, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 39700.0, "gy": 43250.0, "gw": 3000.0, "gh": 950.0}, {"i": 450, "tid": 6, "x": 41000, "y": 35400, "w": 800, "d": 3000, "rot": 90, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 40850.0, "gy": 35400.0, "gw": 950.0, "gh": 3000.0}, {"i": 451, "tid": 6, "x": 52000, "y": 22800, "w": 3000, "d": 800, "rot": 0, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 52000.0, "gy": 22800.0, "gw": 3000.0, "gh": 950.0}, {"i": 452, "tid": 6, "x": 43100, "y": 40600, "w": 3000, "d": 800, "rot": 180, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 43100.0, "gy": 40450.0, "gw": 3000.0, "gh": 950.0}, {"i": 453, "tid": 6, "x": 52100, "y": 21600, "w": 3000, "d": 800, "rot": 0, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 52100.0, "gy": 21600.0, "gw": 3000.0, "gh": 950.0}, {"i": 454, "tid": 6, "x": 36850, "y": 28250, "w": 3000, "d": 800, "rot": 180, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 36850.0, "gy": 28100.0, "gw": 3000.0, "gh": 950.0}, {"i": 455, "tid": 6, "x": 53150, "y": 24650, "w": 800, "d": 3000, "rot": 90, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 53000.0, "gy": 24650.0, "gw": 950.0, "gh": 3000.0}, {"i": 456, "tid": 6, "x": 51300, "y": 34750, "w": 800, "d": 3000, "rot": 90, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 51150.0, "gy": 34750.0, "gw": 950.0, "gh": 3000.0}, {"i": 457, "tid": 6, "x": 43200, "y": 25400, "w": 800, "d": 3000, "rot": 90, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 43050.0, "gy": 25400.0, "gw": 950.0, "gh": 3000.0}, {"i": 458, "tid": 6, "x": 52900, "y": 40950, "w": 800, "d": 3000, "rot": 270, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 52900.0, "gy": 40950.0, "gw": 950.0, "gh": 3000.0}, {"i": 459, "tid": 6, "x": 49600, "y": 42600, "w": 3000, "d": 800, "rot": 0, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 49600.0, "gy": 42600.0, "gw": 3000.0, "gh": 950.0}, {"i": 460, "tid": 6, "x": 37800, "y": 29900, "w": 800, "d": 3000, "rot": 270, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 37800.0, "gy": 29900.0, "gw": 950.0, "gh": 3000.0}, {"i": 461, "tid": 6, "x": 39900, "y": 32600, "w": 3000, "d": 800, "rot": 180, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 39900.0, "gy": 32450.0, "gw": 3000.0, "gh": 950.0}, {"i": 462, "tid": 6, "x": 52500, "y": 28000, "w": 3000, "d": 800, "rot": 180, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 52500.0, "gy": 27850.0, "gw": 3000.0, "gh": 950.0}, {"i": 463, "tid": 6, "x": 43250, "y": 18600, "w": 800, "d": 3000, "rot": 270, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 43250.0, "gy": 18600.0, "gw": 950.0, "gh": 3000.0}, {"i": 464, "tid": 6, "x": 42850, "y": 37450, "w": 800, "d": 3000, "rot": 90, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 42700.0, "gy": 37450.0, "gw": 950.0, "gh": 3000.0}, {"i": 465, "tid": 6, "x": 39900, "y": 22850, "w": 3000, "d": 800, "rot": 0, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 39900.0, "gy": 22850.0, "gw": 3000.0, "gh": 950.0}, {"i": 466, "tid": 6, "x": 49000, "y": 20300, "w": 3000, "d": 800, "rot": 180, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 49000.0, "gy": 20150.0, "gw": 3000.0, "gh": 950.0}, {"i": 467, "tid": 6, "x": 38400, "y": 41150, "w": 3000, "d": 800, "rot": 180, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 38400.0, "gy": 41000.0, "gw": 3000.0, "gh": 950.0}, {"i": 468, "tid": 6, "x": 40950, "y": 33550, "w": 3000, "d": 800, "rot": 0, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 40950.0, "gy": 33550.0, "gw": 3000.0, "gh": 950.0}, {"i": 469, "tid": 6, "x": 48050, "y": 41700, "w": 800, "d": 3000, "rot": 90, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 47900.0, "gy": 41700.0, "gw": 950.0, "gh": 3000.0}, {"i": 470, "tid": 6, "x": 36850, "y": 23350, "w": 3000, "d": 800, "rot": 0, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 36850.0, "gy": 23350.0, "gw": 3000.0, "gh": 950.0}, {"i": 471, "tid": 6, "x": 55100, "y": 29200, "w": 3000, "d": 800, "rot": 180, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 55100.0, "gy": 29050.0, "gw": 3000.0, "gh": 950.0}, {"i": 472, "tid": 6, "x": 50050, "y": 38450, "w": 800, "d": 3000, "rot": 270, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 50050.0, "gy": 38450.0, "gw": 950.0, "gh": 3000.0}, {"i": 473, "tid": 6, "x": 52750, "y": 18450, "w": 800, "d": 3000, "rot": 270, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 52750.0, "gy": 18450.0, "gw": 950.0, "gh": 3000.0}, {"i": 474, "tid": 6, "x": 21600, "y": 37200, "w": 3000, "d": 800, "rot": 180, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 21600.0, "gy": 37050.0, "gw": 3000.0, "gh": 950.0}, {"i": 475, "tid": 6, "x": 53150, "y": 35750, "w": 800, "d": 3000, "rot": 90, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 53000.0, "gy": 35750.0, "gw": 950.0, "gh": 3000.0}, {"i": 476, "tid": 6, "x": 37300, "y": 25600, "w": 3000, "d": 800, "rot": 180, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 37300.0, "gy": 25450.0, "gw": 3000.0, "gh": 950.0}, {"i": 477, "tid": 6, "x": 55200, "y": 22950, "w": 800, "d": 3000, "rot": 270, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 55200.0, "gy": 22950.0, "gw": 950.0, "gh": 3000.0}, {"i": 478, "tid": 6, "x": 38450, "y": 19900, "w": 800, "d": 3000, "rot": 270, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 38450.0, "gy": 19900.0, "gw": 950.0, "gh": 3000.0}, {"i": 479, "tid": 6, "x": 42850, "y": 29050, "w": 800, "d": 3000, "rot": 270, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 42850.0, "gy": 29050.0, "gw": 950.0, "gh": 3000.0}, {"i": 480, "tid": 6, "x": 52000, "y": 39300, "w": 800, "d": 3000, "rot": 90, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 51850.0, "gy": 39300.0, "gw": 950.0, "gh": 3000.0}, {"i": 481, "tid": 6, "x": 38800, "y": 31300, "w": 800, "d": 3000, "rot": 270, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 38800.0, "gy": 31300.0, "gw": 950.0, "gh": 3000.0}, {"i": 482, "tid": 6, "x": 38000, "y": 26800, "w": 3000, "d": 800, "rot": 0, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 38000.0, "gy": 26800.0, "gw": 3000.0, "gh": 950.0}, {"i": 483, "tid": 6, "x": 38300, "y": 42000, "w": 800, "d": 3000, "rot": 90, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 38150.0, "gy": 42000.0, "gw": 950.0, "gh": 3000.0}, {"i": 484, "tid": 6, "x": 54950, "y": 18400, "w": 800, "d": 3000, "rot": 90, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 54800.0, "gy": 18400.0, "gw": 950.0, "gh": 3000.0}, {"i": 485, "tid": 6, "x": 44200, "y": 37150, "w": 800, "d": 3000, "rot": 90, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 44050.0, "gy": 37150.0, "gw": 950.0, "gh": 3000.0}, {"i": 486, "tid": 6, "x": 49350, "y": 19050, "w": 3000, "d": 800, "rot": 0, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 49350.0, "gy": 19050.0, "gw": 3000.0, "gh": 950.0}, {"i": 487, "tid": 6, "x": 22050, "y": 26800, "w": 3000, "d": 800, "rot": 0, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 22050.0, "gy": 26800.0, "gw": 3000.0, "gh": 950.0}, {"i": 488, "tid": 6, "x": 37550, "y": 33400, "w": 800, "d": 3000, "rot": 270, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 37550.0, "gy": 33400.0, "gw": 950.0, "gh": 3000.0}, {"i": 489, "tid": 6, "x": 41200, "y": 25750, "w": 800, "d": 3000, "rot": 90, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 41050.0, "gy": 25750.0, "gw": 950.0, "gh": 3000.0}, {"i": 490, "tid": 6, "x": 41200, "y": 17950, "w": 800, "d": 3000, "rot": 270, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 41200.0, "gy": 17950.0, "gw": 950.0, "gh": 3000.0}, {"i": 491, "tid": 6, "x": 26800, "y": 34650, "w": 3000, "d": 800, "rot": 180, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 26800.0, "gy": 34500.0, "gw": 3000.0, "gh": 950.0}, {"i": 492, "tid": 6, "x": 50000, "y": 35150, "w": 800, "d": 3000, "rot": 90, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 49850.0, "gy": 35150.0, "gw": 950.0, "gh": 3000.0}, {"i": 493, "tid": 6, "x": 49650, "y": 43750, "w": 3000, "d": 800, "rot": 0, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 49650.0, "gy": 43750.0, "gw": 3000.0, "gh": 950.0}, {"i": 494, "tid": 6, "x": 25000, "y": 37000, "w": 3000, "d": 800, "rot": 180, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 25000.0, "gy": 36850.0, "gw": 3000.0, "gh": 950.0}, {"i": 495, "tid": 6, "x": 51050, "y": 38900, "w": 800, "d": 3000, "rot": 90, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 50900.0, "gy": 38900.0, "gw": 950.0, "gh": 3000.0}, {"i": 496, "tid": 6, "x": 52100, "y": 24300, "w": 800, "d": 3000, "rot": 270, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 52100.0, "gy": 24300.0, "gw": 950.0, "gh": 3000.0}, {"i": 497, "tid": 6, "x": 30200, "y": 39750, "w": 800, "d": 3000, "rot": 90, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 30050.0, "gy": 39750.0, "gw": 950.0, "gh": 3000.0}, {"i": 498, "tid": 6, "x": 39400, "y": 18750, "w": 800, "d": 3000, "rot": 90, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 39250.0, "gy": 18750.0, "gw": 950.0, "gh": 3000.0}, {"i": 499, "tid": 6, "x": 26650, "y": 19200, "w": 3000, "d": 800, "rot": 0, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 26650.0, "gy": 19200.0, "gw": 3000.0, "gh": 950.0}, {"i": 500, "tid": 6, "x": 53900, "y": 18200, "w": 800, "d": 3000, "rot": 270, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 53900.0, "gy": 18200.0, "gw": 950.0, "gh": 3000.0}, {"i": 501, "tid": 6, "x": 29550, "y": 20900, "w": 800, "d": 3000, "rot": 90, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 29400.0, "gy": 20900.0, "gw": 950.0, "gh": 3000.0}, {"i": 502, "tid": 6, "x": 49050, "y": 34000, "w": 800, "d": 3000, "rot": 270, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 49050.0, "gy": 34000.0, "gw": 950.0, "gh": 3000.0}, {"i": 503, "tid": 1, "x": 46950, "y": 38600, "w": 2000, "d": 1200, "rot": 0, "h": 2800, "gap": 200, "pr": 2100, "ld": 6, "gx": 46950.0, "gy": 38600.0, "gw": 2000.0, "gh": 1400.0}, {"i": 504, "tid": 6, "x": 49600, "y": 18050, "w": 3000, "d": 800, "rot": 0, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 49600.0, "gy": 18050.0, "gw": 3000.0, "gh": 950.0}, {"i": 505, "tid": 1, "x": 30600, "y": 19550, "w": 1200, "d": 2000, "rot": 270, "h": 2800, "gap": 200, "pr": 2100, "ld": 6, "gx": 30600.0, "gy": 19550.0, "gw": 1400.0, "gh": 2000.0}, {"i": 506, "tid": 6, "x": 52100, "y": 36100, "w": 800, "d": 3000, "rot": 270, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 52100.0, "gy": 36100.0, "gw": 950.0, "gh": 3000.0}, {"i": 507, "tid": 6, "x": 38400, "y": 37950, "w": 800, "d": 3000, "rot": 90, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 38250.0, "gy": 37950.0, "gw": 950.0, "gh": 3000.0}, {"i": 508, "tid": 6, "x": 29150, "y": 28200, "w": 800, "d": 3000, "rot": 270, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 29150.0, "gy": 28200.0, "gw": 950.0, "gh": 3000.0}, {"i": 509, "tid": 6, "x": 43050, "y": 22250, "w": 800, "d": 3000, "rot": 270, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 43050.0, "gy": 22250.0, "gw": 950.0, "gh": 3000.0}, {"i": 510, "tid": 6, "x": 52000, "y": 29150, "w": 3000, "d": 800, "rot": 180, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 52000.0, "gy": 29000.0, "gw": 3000.0, "gh": 950.0}, {"i": 511, "tid": 6, "x": 54000, "y": 23800, "w": 800, "d": 3000, "rot": 270, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 54000.0, "gy": 23800.0, "gw": 950.0, "gh": 3000.0}, {"i": 512, "tid": 6, "x": 59200, "y": 20000, "w": 800, "d": 3000, "rot": 90, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 59050.0, "gy": 20000.0, "gw": 950.0, "gh": 3000.0}, {"i": 513, "tid": 6, "x": 39600, "y": 38450, "w": 3000, "d": 800, "rot": 0, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 39600.0, "gy": 38450.0, "gw": 3000.0, "gh": 950.0}, {"i": 514, "tid": 6, "x": 43150, "y": 41950, "w": 800, "d": 3000, "rot": 270, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 43150.0, "gy": 41950.0, "gw": 950.0, "gh": 3000.0}, {"i": 515, "tid": 6, "x": 23650, "y": 19500, "w": 3000, "d": 800, "rot": 180, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 23650.0, "gy": 19350.0, "gw": 3000.0, "gh": 950.0}, {"i": 516, "tid": 1, "x": 56200, "y": 22400, "w": 1200, "d": 2000, "rot": 90, "h": 2800, "gap": 200, "pr": 2100, "ld": 6, "gx": 56000.0, "gy": 22400.0, "gw": 1400.0, "gh": 2000.0}, {"i": 517, "tid": 1, "x": 23600, "y": 29450, "w": 1200, "d": 2000, "rot": 270, "h": 2800, "gap": 200, "pr": 2100, "ld": 6, "gx": 23600.0, "gy": 29450.0, "gw": 1400.0, "gh": 2000.0}, {"i": 518, "tid": 6, "x": 40850, "y": 34550, "w": 3000, "d": 800, "rot": 180, "h": 1900, "gap": 150, "pr": 2100, "ld": 6, "gx": 40850.0, "gy": 34400.0, "gw": 3000.0, "gh": 950.0}, {"i": 519, "tid": 1, "x": 22250, "y": 23400, "w": 1200, "d": 2000, "rot": 90, "h": 2800, "gap": 200, "pr": 2100, "ld": 6, "gx": 22050.0, "gy": 23400.0, "gw": 1400.0, "gh": 2000.0}, {"i": 520, "tid": 10, "x": 32300, "y": 35050, "w": 1000, "d": 2000, "rot": 90, "h": 2400, "gap": 200, "pr": 1850, "ld": 5, "gx": 32100.0, "gy": 35050.0, "gw": 1200.0, "gh": 2000.0}, {"i": 521, "tid": 10, "x": 21000, "y": 34600, "w": 2000, "d": 1000, "rot": 180, "h": 2400, "gap": 200, "pr": 1850, "ld": 5, "gx": 21000.0, "gy": 34400.0, "gw": 2000.0, "gh": 1200.0}, {"i": 522, "tid": 10, "x": 38200, "y": 17850, "w": 1000, "d": 2000, "rot": 90, "h": 2400, "gap": 200, "pr": 1850, "ld": 5, "gx": 38000.0, "gy": 17850.0, "gw": 1200.0, "gh": 2000.0}, {"i": 523, "tid": 10, "x": 25150, "y": 25800, "w": 1000, "d": 2000, "rot": 270, "h": 2400, "gap": 200, "pr": 1850, "ld": 5, "gx": 25150.0, "gy": 25800.0, "gw": 1200.0, "gh": 2000.0}, {"i": 524, "tid": 10, "x": 37450, "y": 21100, "w": 1000, "d": 2000, "rot": 90, "h": 2400, "gap": 200, "pr": 1850, "ld": 5, "gx": 37250.0, "gy": 21100.0, "gw": 1200.0, "gh": 2000.0}, {"i": 525, "tid": 10, "x": 38750, "y": 29200, "w": 1000, "d": 2000, "rot": 270, "h": 2400, "gap": 200, "pr": 1850, "ld": 5, "gx": 38750.0, "gy": 29200.0, "gw": 1200.0, "gh": 2000.0}, {"i": 526, "tid": 10, "x": 26400, "y": 29250, "w": 1000, "d": 2000, "rot": 90, "h": 2400, "gap": 200, "pr": 1850, "ld": 5, "gx": 26200.0, "gy": 29250.0, "gw": 1200.0, "gh": 2000.0}, {"i": 527, "tid": 10, "x": 36350, "y": 34950, "w": 1000, "d": 2000, "rot": 270, "h": 2400, "gap": 200, "pr": 1850, "ld": 5, "gx": 36350.0, "gy": 34950.0, "gw": 1200.0, "gh": 2000.0}, {"i": 528, "tid": 10, "x": 22200, "y": 27750, "w": 1000, "d": 2000, "rot": 90, "h": 2400, "gap": 200, "pr": 1850, "ld": 5, "gx": 22000.0, "gy": 27750.0, "gw": 1200.0, "gh": 2000.0}, {"i": 529, "tid": 10, "x": 23000, "y": 35950, "w": 2000, "d": 1000, "rot": 0, "h": 2400, "gap": 200, "pr": 1850, "ld": 5, "gx": 23000.0, "gy": 35950.0, "gw": 2000.0, "gh": 1200.0}, {"i": 530, "tid": 7, "x": 58200, "y": 28450, "w": 1500, "d": 1500, "rot": 270, "h": 3200, "gap": 300, "pr": 2400, "ld": 5, "gx": 58200.0, "gy": 28450.0, "gw": 1800.0, "gh": 1500.0}, {"i": 531, "tid": 5, "x": 41950, "y": 36650, "w": 2000, "d": 800, "rot": 180, "h": 1900, "gap": 150, "pr": 1700, "ld": 4, "gx": 41950.0, "gy": 36500.0, "gw": 2000.0, "gh": 950.0}, {"i": 532, "tid": 5, "x": 31350, "y": 39200, "w": 2000, "d": 800, "rot": 180, "h": 1900, "gap": 150, "pr": 1700, "ld": 4, "gx": 31350.0, "gy": 39050.0, "gw": 2000.0, "gh": 950.0}, {"i": 533, "tid": 5, "x": 57850, "y": 17900, "w": 2000, "d": 800, "rot": 180, "h": 1900, "gap": 150, "pr": 1700, "ld": 4, "gx": 57850.0, "gy": 17750.0, "gw": 2000.0, "gh": 950.0}, {"i": 534, "tid": 5, "x": 54150, "y": 26800, "w": 2000, "d": 800, "rot": 0, "h": 1900, "gap": 150, "pr": 1700, "ld": 4, "gx": 54150.0, "gy": 26800.0, "gw": 2000.0, "gh": 950.0}, {"i": 535, "tid": 5, "x": 29500, "y": 24150, "w": 800, "d": 2000, "rot": 90, "h": 1900, "gap": 150, "pr": 1700, "ld": 4, "gx": 29350.0, "gy": 24150.0, "gw": 950.0, "gh": 2000.0}, {"i": 536, "tid": 5, "x": 28050, "y": 37100, "w": 2000, "d": 800, "rot": 180, "h": 1900, "gap": 150, "pr": 1700, "ld": 4, "gx": 28050.0, "gy": 36950.0, "gw": 2000.0, "gh": 950.0}, {"i": 537, "tid": 5, "x": 53100, "y": 38750, "w": 800, "d": 2000, "rot": 90, "h": 1900, "gap": 150, "pr": 1700, "ld": 4, "gx": 52950.0, "gy": 38750.0, "gw": 950.0, "gh": 2000.0}, {"i": 538, "tid": 5, "x": 35200, "y": 38100, "w": 800, "d": 2000, "rot": 90, "h": 1900, "gap": 150, "pr": 1700, "ld": 4, "gx": 35050.0, "gy": 38100.0, "gw": 950.0, "gh": 2000.0}, {"i": 539, "tid": 5, "x": 52150, "y": 34000, "w": 800, "d": 2000, "rot": 270, "h": 1900, "gap": 150, "pr": 1700, "ld": 4, "gx": 52150.0, "gy": 34000.0, "gw": 950.0, "gh": 2000.0}, {"i": 540, "tid": 0, "x": 21000, "y": 21950, "w": 1200, "d": 1000, "rot": 90, "h": 2800, "gap": 200, "pr": 1600, "ld": 3, "gx": 20800.0, "gy": 21950.0, "gw": 1400.0, "gh": 1000.0}, {"i": 541, "tid": 0, "x": 26450, "y": 21850, "w": 1200, "d": 1000, "rot": 270, "h": 2800, "gap": 200, "pr": 1600, "ld": 3, "gx": 26450.0, "gy": 21850.0, "gw": 1400.0, "gh": 1000.0}, {"i": 542, "tid": 0, "x": 36250, "y": 29300, "w": 1200, "d": 1000, "rot": 270, "h": 2800, "gap": 200, "pr": 1600, "ld": 3, "gx": 36250.0, "gy": 29300.0, "gw": 1400.0, "gh": 1000.0}, {"i": 543, "tid": 0, "x": 22600, "y": 33000, "w": 1000, "d": 1200, "rot": 180, "h": 2800, "gap": 200, "pr": 1600, "ld": 3, "gx": 22600.0, "gy": 32800.0, "gw": 1000.0, "gh": 1400.0}, {"i": 544, "tid": 0, "x": 25000, "y": 34000, "w": 1200, "d": 1000, "rot": 90, "h": 2800, "gap": 200, "pr": 1600, "ld": 3, "gx": 24800.0, "gy": 34000.0, "gw": 1400.0, "gh": 1000.0}, {"i": 545, "tid": 0, "x": 21000, "y": 19350, "w": 1200, "d": 1000, "rot": 90, "h": 2800, "gap": 200, "pr": 1600, "ld": 3, "gx": 20800.0, "gy": 19350.0, "gw": 1400.0, "gh": 1000.0}, {"i": 546, "tid": 0, "x": 34700, "y": 43800, "w": 1000, "d": 1200, "rot": 180, "h": 2800, "gap": 200, "pr": 1600, "ld": 3, "gx": 34700.0, "gy": 43600.0, "gw": 1000.0, "gh": 1400.0}, {"i": 547, "tid": 0, "x": 21000, "y": 32050, "w": 1200, "d": 1000, "rot": 90, "h": 2800, "gap": 200, "pr": 1600, "ld": 3, "gx": 20800.0, "gy": 32050.0, "gw": 1400.0, "gh": 1000.0}, {"i": 548, "tid": 0, "x": 21000, "y": 26800, "w": 1000, "d": 1200, "rot": 180, "h": 2800, "gap": 200, "pr": 1600, "ld": 3, "gx": 21000.0, "gy": 26600.0, "gw": 1000.0, "gh": 1400.0}, {"i": 549, "tid": 4, "x": 40000, "y": 31500, "w": 1000, "d": 800, "rot": 180, "h": 1900, "gap": 150, "pr": 1200, "ld": 2, "gx": 40000.0, "gy": 31350.0, "gw": 1000.0, "gh": 950.0}, {"i": 550, "tid": 4, "x": 21000, "y": 29550, "w": 1000, "d": 800, "rot": 0, "h": 1900, "gap": 150, "pr": 1200, "ld": 2, "gx": 21000.0, "gy": 29550.0, "gw": 1000.0, "gh": 950.0}, {"i": 551, "tid": 4, "x": 41200, "y": 21450, "w": 800, "d": 1000, "rot": 270, "h": 1900, "gap": 150, "pr": 1200, "ld": 2, "gx": 41200.0, "gy": 21450.0, "gw": 950.0, "gh": 1000.0}, {"i": 552, "tid": 4, "x": 51100, "y": 37950, "w": 1000, "d": 800, "rot": 0, "h": 1900, "gap": 150, "pr": 1200, "ld": 2, "gx": 51100.0, "gy": 37950.0, "gw": 1000.0, "gh": 950.0}, {"i": 553, "tid": 4, "x": 28600, "y": 26350, "w": 1000, "d": 800, "rot": 180, "h": 1900, "gap": 150, "pr": 1200, "ld": 2, "gx": 28600.0, "gy": 26200.0, "gw": 1000.0, "gh": 950.0}, {"i": 554, "tid": 4, "x": 41150, "y": 24000, "w": 800, "d": 1000, "rot": 90, "h": 1900, "gap": 150, "pr": 1200, "ld": 2, "gx": 41000.0, "gy": 24000.0, "gw": 950.0, "gh": 1000.0}, {"i": 555, "tid": 4, "x": 40350, "y": 18050, "w": 800, "d": 1000, "rot": 90, "h": 1900, "gap": 150, "pr": 1200, "ld": 2, "gx": 40200.0, "gy": 18050.0, "gw": 950.0, "gh": 1000.0}, {"i": 556, "tid": 4, "x": 41500, "y": 40400, "w": 1000, "d": 800, "rot": 0, "h": 1900, "gap": 150, "pr": 1200, "ld": 2, "gx": 41500.0, "gy": 40400.0, "gw": 1000.0, "gh": 950.0}, {"i": 557, "tid": 4, "x": 42200, "y": 21800, "w": 800, "d": 1000, "rot": 90, "h": 1900, "gap": 150, "pr": 1200, "ld": 2, "gx": 42050.0, "gy": 21800.0, "gw": 950.0, "gh": 1000.0}, {"i": 558, "tid": 4, "x": 42050, "y": 27350, "w": 1000, "d": 800, "rot": 0, "h": 1900, "gap": 150, "pr": 1200, "ld": 2, "gx": 42050.0, "gy": 27350.0, "gw": 1000.0, "gh": 950.0}, {"i": 559, "tid": 4, "x": 36750, "y": 24500, "w": 1000, "d": 800, "rot": 0, "h": 1900, "gap": 150, "pr": 1200, "ld": 2, "gx": 36750.0, "gy": 24500.0, "gw": 1000.0, "gh": 950.0}, {"i": 560, "tid": 4, "x": 39900, "y": 37250, "w": 800, "d": 1000, "rot": 90, "h": 1900, "gap": 150, "pr": 1200, "ld": 2, "gx": 39750.0, "gy": 37250.0, "gw": 950.0, "gh": 1000.0}, {"i": 561, "tid": 4, "x": 49500, "y": 41500, "w": 1000, "d": 800, "rot": 0, "h": 1900, "gap": 150, "pr": 1200, "ld": 2, "gx": 49500.0, "gy": 41500.0, "gw": 1000.0, "gh": 950.0}, {"i": 562, "tid": 4, "x": 42950, "y": 32400, "w": 1000, "d": 800, "rot": 180, "h": 1900, "gap": 150, "pr": 1200, "ld": 2, "gx": 42950.0, "gy": 32250.0, "gw": 1000.0, "gh": 950.0}, {"i": 563, "tid": 4, "x": 50000, "y": 34100, "w": 800, "d": 1000, "rot": 270, "h": 1900, "gap": 150, "pr": 1200, "ld": 2, "gx": 50000.0, "gy": 34100.0, "gw": 950.0, "gh": 1000.0}, {"i": 564, "tid": 4, "x": 21050, "y": 24550, "w": 1000, "d": 800, "rot": 180, "h": 1900, "gap": 150, "pr": 1200, "ld": 2, "gx": 21050.0, "gy": 24400.0, "gw": 1000.0, "gh": 950.0}, {"i": 565, "tid": 4, "x": 53000, "y": 43950, "w": 800, "d": 1000, "rot": 90, "h": 1900, "gap": 150, "pr": 1200, "ld": 2, "gx": 52850.0, "gy": 43950.0, "gw": 950.0, "gh": 1000.0}, {"i": 566, "tid": 4, "x": 53150, "y": 34550, "w": 800, "d": 1000, "rot": 90, "h": 1900, "gap": 150, "pr": 1200, "ld": 2, "gx": 53000.0, "gy": 34550.0, "gw": 950.0, "gh": 1000.0}, {"i": 567, "tid": 4, "x": 21200, "y": 42350, "w": 800, "d": 1000, "rot": 90, "h": 1900, "gap": 150, "pr": 1200, "ld": 2, "gx": 21050.0, "gy": 42350.0, "gw": 950.0, "gh": 1000.0}, {"i": 568, "tid": 4, "x": 48000, "y": 40150, "w": 1000, "d": 800, "rot": 180, "h": 1900, "gap": 150, "pr": 1200, "ld": 2, "gx": 48000.0, "gy": 40000.0, "gw": 1000.0, "gh": 950.0}, {"i": 569, "tid": 4, "x": 21050, "y": 39650, "w": 800, "d": 1000, "rot": 270, "h": 1900, "gap": 150, "pr": 1200, "ld": 2, "gx": 21050.0, "gy": 39650.0, "gw": 950.0, "gh": 1000.0}, {"i": 570, "tid": 4, "x": 29250, "y": 32250, "w": 1000, "d": 800, "rot": 180, "h": 1900, "gap": 150, "pr": 1200, "ld": 2, "gx": 29250.0, "gy": 32100.0, "gw": 1000.0, "gh": 950.0}, {"i": 571, "tid": 4, "x": 40100, "y": 30500, "w": 1000, "d": 800, "rot": 0, "h": 1900, "gap": 150, "pr": 1200, "ld": 2, "gx": 40100.0, "gy": 30500.0, "gw": 1000.0, "gh": 950.0}, {"i": 572, "tid": 4, "x": 59200, "y": 18900, "w": 800, "d": 1000, "rot": 90, "h": 1900, "gap": 150, "pr": 1200, "ld": 2, "gx": 59050.0, "gy": 18900.0, "gw": 950.0, "gh": 1000.0}, {"i": 573, "tid": 4, "x": 41800, "y": 37450, "w": 800, "d": 1000, "rot": 270, "h": 1900, "gap": 150, "pr": 1200, "ld": 2, "gx": 41800.0, "gy": 37450.0, "gw": 950.0, "gh": 1000.0}, {"i": 574, "tid": 4, "x": 39450, "y": 21750, "w": 800, "d": 1000, "rot": 90, "h": 1900, "gap": 150, "pr": 1200, "ld": 2, "gx": 39300.0, "gy": 21750.0, "gw": 950.0, "gh": 1000.0}, {"i": 575, "tid": 4, "x": 30000, "y": 42800, "w": 1000, "d": 800, "rot": 0, "h": 1900, "gap": 150, "pr": 1200, "ld": 2, "gx": 30000.0, "gy": 42800.0, "gw": 1000.0, "gh": 950.0}, {"i": 576, "tid": 11, "x": 49250, "y": 21400, "w": 1200, "d": 600, "rot": 180, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 49250.0, "gy": 21250.0, "gw": 1200.0, "gh": 750.0}, {"i": 577, "tid": 11, "x": 42250, "y": 31100, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 42100.0, "gy": 31100.0, "gw": 750.0, "gh": 1200.0}, {"i": 578, "tid": 11, "x": 57400, "y": 23350, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 57400.0, "gy": 23350.0, "gw": 750.0, "gh": 1200.0}, {"i": 579, "tid": 11, "x": 41750, "y": 44400, "w": 1200, "d": 600, "rot": 180, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 41750.0, "gy": 44250.0, "gw": 1200.0, "gh": 750.0}, {"i": 580, "tid": 11, "x": 37500, "y": 43450, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 37350.0, "gy": 43450.0, "gw": 750.0, "gh": 1200.0}, {"i": 581, "tid": 11, "x": 55250, "y": 21600, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 55250.0, "gy": 21600.0, "gw": 750.0, "gh": 1200.0}, {"i": 582, "tid": 11, "x": 37550, "y": 42150, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 37550.0, "gy": 42150.0, "gw": 750.0, "gh": 1200.0}, {"i": 583, "tid": 11, "x": 44250, "y": 18200, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 44100.0, "gy": 18200.0, "gw": 750.0, "gh": 1200.0}, {"i": 584, "tid": 11, "x": 32000, "y": 19950, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 32000.0, "gy": 19950.0, "gw": 750.0, "gh": 1200.0}, {"i": 585, "tid": 11, "x": 52150, "y": 20200, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 52000.0, "gy": 20200.0, "gw": 750.0, "gh": 1200.0}, {"i": 586, "tid": 11, "x": 31400, "y": 17850, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 31250.0, "gy": 17850.0, "gw": 750.0, "gh": 1200.0}, {"i": 587, "tid": 11, "x": 39800, "y": 44350, "w": 1200, "d": 600, "rot": 180, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 39800.0, "gy": 44200.0, "gw": 1200.0, "gh": 750.0}, {"i": 588, "tid": 11, "x": 48850, "y": 43600, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 48850.0, "gy": 43600.0, "gw": 750.0, "gh": 1200.0}, {"i": 589, "tid": 11, "x": 40450, "y": 25550, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 40300.0, "gy": 25550.0, "gw": 750.0, "gh": 1200.0}, {"i": 590, "tid": 11, "x": 42100, "y": 29250, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 42100.0, "gy": 29250.0, "gw": 750.0, "gh": 1200.0}, {"i": 591, "tid": 11, "x": 42550, "y": 17850, "w": 1200, "d": 600, "rot": 0, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 42550.0, "gy": 17850.0, "gw": 1200.0, "gh": 750.0}, {"i": 592, "tid": 11, "x": 43950, "y": 36550, "w": 1200, "d": 600, "rot": 180, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 43950.0, "gy": 36400.0, "gw": 1200.0, "gh": 750.0}, {"i": 593, "tid": 11, "x": 55600, "y": 27800, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 55600.0, "gy": 27800.0, "gw": 750.0, "gh": 1200.0}, {"i": 594, "tid": 11, "x": 50500, "y": 21250, "w": 1200, "d": 600, "rot": 0, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 50500.0, "gy": 21250.0, "gw": 1200.0, "gh": 750.0}, {"i": 595, "tid": 11, "x": 39450, "y": 40400, "w": 1200, "d": 600, "rot": 180, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 39450.0, "gy": 40250.0, "gw": 1200.0, "gh": 750.0}, {"i": 596, "tid": 11, "x": 40550, "y": 29300, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 40550.0, "gy": 29300.0, "gw": 750.0, "gh": 1200.0}, {"i": 597, "tid": 11, "x": 50950, "y": 34150, "w": 1200, "d": 600, "rot": 180, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 50950.0, "gy": 34000.0, "gw": 1200.0, "gh": 750.0}, {"i": 598, "tid": 11, "x": 55050, "y": 26150, "w": 1200, "d": 600, "rot": 180, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 55050.0, "gy": 26000.0, "gw": 1200.0, "gh": 750.0}, {"i": 599, "tid": 11, "x": 26550, "y": 18000, "w": 600, "d": 1200, "rot": 90, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 26400.0, "gy": 18000.0, "gw": 750.0, "gh": 1200.0}, {"i": 600, "tid": 11, "x": 24950, "y": 21700, "w": 1200, "d": 600, "rot": 180, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 24950.0, "gy": 21550.0, "gw": 1200.0, "gh": 750.0}, {"i": 601, "tid": 11, "x": 29650, "y": 35450, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 29650.0, "gy": 35450.0, "gw": 750.0, "gh": 1200.0}, {"i": 602, "tid": 11, "x": 39100, "y": 42100, "w": 600, "d": 1200, "rot": 270, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 39100.0, "gy": 42100.0, "gw": 750.0, "gh": 1200.0}, {"i": 603, "tid": 11, "x": 25000, "y": 29250, "w": 1200, "d": 600, "rot": 180, "h": 1800, "gap": 150, "pr": 1100, "ld": 2, "gx": 25000.0, "gy": 29100.0, "gw": 1200.0, "gh": 750.0}], "stats": {"n_bays": 604, "coverage": 0.5603042633910553, "score": 4592.202506482074, "price_per_load": 349.62913014160483, "total_price": 1037000, "total_loads": 2966}, "label": "Solution"}], "ceiling": {"segments": [{"x0": 0, "x1": 8000, "h": 3500}, {"x0": 8000, "x1": 14000, "h": 2200}, {"x0": 14000, "x1": 22000, "h": 3500}, {"x0": 22000, "x1": 30000, "h": 2800}, {"x0": 30000, "x1": 38000, "h": 4000}, {"x0": 38000, "x1": 44000, "h": 2500}, {"x0": 44000, "x1": 50000, "h": 3500}, {"x0": 50000, "x1": 56000, "h": 2000}, {"x0": 56000, "x1": 60000.0, "h": 3200}], "h_max": 4000}, "bayTypes": [{"id": 0, "w": 1000, "d": 1200, "h": 2800, "gap": 200, "ld": 3, "pr": 1600}, {"id": 1, "w": 2000, "d": 1200, "h": 2800, "gap": 200, "ld": 6, "pr": 2100}, {"id": 2, "w": 3000, "d": 1200, "h": 2800, "gap": 200, "ld": 9, "pr": 2500}, {"id": 3, "w": 4000, "d": 1200, "h": 2800, "gap": 200, "ld": 12, "pr": 2900}, {"id": 4, "w": 1000, "d": 800, "h": 1900, "gap": 150, "ld": 2, "pr": 1200}, {"id": 5, "w": 2000, "d": 800, "h": 1900, "gap": 150, "ld": 4, "pr": 1700}, {"id": 6, "w": 3000, "d": 800, "h": 1900, "gap": 150, "ld": 6, "pr": 2100}, {"id": 7, "w": 1500, "d": 1500, "h": 3200, "gap": 300, "ld": 5, "pr": 2400}, {"id": 8, "w": 3000, "d": 1500, "h": 3200, "gap": 300, "ld": 10, "pr": 3200}, {"id": 9, "w": 4500, "d": 1500, "h": 3200, "gap": 300, "ld": 15, "pr": 4000}, {"id": 10, "w": 2000, "d": 1000, "h": 2400, "gap": 200, "ld": 5, "pr": 1850}, {"id": 11, "w": 1200, "d": 600, "h": 1800, "gap": 150, "ld": 2, "pr": 1100}], "bbox": {"x0": 0.0, "y0": 0.0, "x1": 60000.0, "y1": 45000.0}, "compare": false};
+
+const WH = DATA.wh;
+const OBS = DATA.obs;
+const SOLUTIONS = DATA.solutions;
+const CEIL = DATA.ceiling;
+const BAY_TYPES = DATA.bayTypes;
+const B = DATA.bbox;
+const COMPARE = DATA.compare;
+
+// Cool palette for bay types — saturated, distinguishable in light and dark
+const PALETTE = [
+    '#6c9cff', '#52d987', '#ffb057', '#ff5d66', '#c78bff', '#5ac8fa',
+    '#ffd166', '#06d6a8', '#ef798a', '#8ac6d1', '#f7a072', '#b28dff',
+    '#f4978e', '#6dd3ce', '#ffd670', '#e9ff70', '#ffa1b7', '#70d6ff',
+];
+function colorFor(tid) { return PALETTE[tid % PALETTE.length]; }
+function hexToRgb(hex) {
+    const h = hex.replace('#', '');
+    return {
+        r: parseInt(h.slice(0, 2), 16),
+        g: parseInt(h.slice(2, 4), 16),
+        b: parseInt(h.slice(4, 6), 16),
+    };
+}
+
+let activeIdx = 0;
+let BAYS = SOLUTIONS[activeIdx].bays;
+
+let viewMode = '2d';  // '2d' | '3d'
+
+/* ─────────────────────────────────────────────
+ * 2D VIEW
+ * ───────────────────────────────────────────── */
+const canvas2d = document.getElementById('canvas2d');
+const ctx = canvas2d.getContext('2d');
+const tip = document.getElementById('tooltip');
+let sc = 1, ox = 0, oy = 0;
+let drag = false, dx0, dy0;
+let hov2d = -1, sel = -1;
+
+function resize2d() {
+    const r = canvas2d.parentElement.getBoundingClientRect();
+    canvas2d.width = r.width * devicePixelRatio;
+    canvas2d.height = r.height * devicePixelRatio;
+    canvas2d.style.width = r.width + 'px';
+    canvas2d.style.height = r.height + 'px';
+    ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+    fit2d();
+    draw2d();
+}
+
+function fit2d() {
+    const cw = canvas2d.width / devicePixelRatio;
+    const ch = canvas2d.height / devicePixelRatio;
+    const pad = 50;
+    const sx = (cw - pad * 2) / (B.x1 - B.x0);
+    const sy = (ch - pad * 2) / (B.y1 - B.y0);
+    sc = Math.min(sx, sy);
+    ox = (cw - (B.x1 - B.x0) * sc) / 2 - B.x0 * sc;
+    oy = (ch - (B.y1 - B.y0) * sc) / 2 - B.y0 * sc;
+}
+
+function ts(x, y) {
+    const ch = canvas2d.height / devicePixelRatio;
+    return [x * sc + ox, ch - (y * sc + oy)];
+}
+function tw(sx, sy) {
+    const ch = canvas2d.height / devicePixelRatio;
+    return [(sx - ox) / sc, (ch - sy - oy) / sc];
+}
+
+function roundRect(x, y, w, h, r) {
+    r = Math.min(r, Math.abs(w) / 2, Math.abs(h) / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y); ctx.arcTo(x + w, y, x + w, y + r, r);
+    ctx.lineTo(x + w, y + h - r); ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+    ctx.lineTo(x + r, y + h); ctx.arcTo(x, y + h, x, y + h - r, r);
+    ctx.lineTo(x, y + r); ctx.arcTo(x, y, x + r, y, r);
+    ctx.closePath();
+}
+
+function gapSide(rot) {
+    // Which local edge of the bay the gap sticks out from.
+    // Returns one of 'N','S','E','W' for convenience.
+    if (rot === 0) return 'N';
+    if (rot === 180) return 'S';
+    if (rot === 90) return 'W';
+    if (rot === 270) return 'E';
+    return 'N';
+}
+
+function draw2d() {
+    const cw = canvas2d.width / devicePixelRatio;
+    const ch = canvas2d.height / devicePixelRatio;
+    ctx.clearRect(0, 0, cw, ch);
+
+    const sGap = document.getElementById('showGaps').checked;
+    const sObs = document.getElementById('showObstacles').checked;
+    const sLbl = document.getElementById('showLabels').checked;
+    const sGrid = document.getElementById('showGrid').checked;
+
+    // Background grid
+    if (sGrid) {
+        const span = Math.max(B.x1 - B.x0, B.y1 - B.y0);
+        const step = Math.pow(10, Math.floor(Math.log10(span)) - 1);
+        ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+        ctx.lineWidth = 1;
+        for (let gx = Math.floor(B.x0 / step) * step; gx <= B.x1; gx += step) {
+            const [sx] = ts(gx, 0);
+            ctx.beginPath(); ctx.moveTo(sx, 0); ctx.lineTo(sx, ch); ctx.stroke();
+        }
+        for (let gy = Math.floor(B.y0 / step) * step; gy <= B.y1; gy += step) {
+            const [, sy] = ts(0, gy);
+            ctx.beginPath(); ctx.moveTo(0, sy); ctx.lineTo(cw, sy); ctx.stroke();
+        }
+    }
+
+    // Warehouse fill + outline
+    ctx.beginPath();
+    for (let i = 0; i < WH.length; i++) {
+        const [sx, sy] = ts(WH[i][0], WH[i][1]);
+        i === 0 ? ctx.moveTo(sx, sy) : ctx.lineTo(sx, sy);
+    }
+    ctx.closePath();
+    // Subtle gradient floor
+    const grad = ctx.createLinearGradient(0, 0, 0, ch);
+    grad.addColorStop(0, '#1c212d');
+    grad.addColorStop(1, '#151821');
+    ctx.fillStyle = grad;
+    ctx.fill();
+    ctx.strokeStyle = '#3a4050';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Obstacles
+    if (sObs) {
+        for (const o of OBS) {
+            const [sx, sy] = ts(o.x, o.y + o.h);
+            const w = o.w * sc, h = o.h * sc;
+            const r = Math.min(3, w / 4, h / 4);
+            roundRect(sx, sy, w, h, r);
+            ctx.fillStyle = 'rgba(255, 93, 102, 0.18)';
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(255, 93, 102, 0.55)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            // Diagonal hatching (subtle)
+            ctx.save();
+            ctx.beginPath(); roundRect(sx, sy, w, h, r); ctx.clip();
+            ctx.strokeStyle = 'rgba(255, 93, 102, 0.18)';
+            ctx.lineWidth = 0.7;
+            for (let dy = -h; dy < w + h; dy += 6) {
+                ctx.beginPath();
+                ctx.moveTo(sx + dy, sy); ctx.lineTo(sx + dy + h, sy + h);
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+    }
+
+    // Gaps (drawn under bays)
+    if (sGap) {
+        for (const b of BAYS) {
+            const [gsx, gsy] = ts(b.gx, b.gy + b.gh);
+            const gw = b.gw * sc, gh = b.gh * sc;
+            ctx.fillStyle = 'rgba(108, 156, 255, 0.10)';
+            ctx.fillRect(gsx, gsy, gw, gh);
+            ctx.strokeStyle = 'rgba(108, 156, 255, 0.35)';
+            ctx.lineWidth = 0.5;
+            ctx.setLineDash([3, 3]);
+            ctx.strokeRect(gsx, gsy, gw, gh);
+            ctx.setLineDash([]);
+        }
+    }
+
+    // Bays
+    for (let i = 0; i < BAYS.length; i++) {
+        const b = BAYS[i];
+        const [sx, sy] = ts(b.x, b.y + b.d);
+        const w = b.w * sc, h = b.d * sc;
+        const col = colorFor(b.tid);
+        const isH = i === hov2d;
+        const isS = i === sel;
+        const r = Math.min(2, w / 4, h / 4);
+
+        if (isH || isS) {
+            ctx.save();
+            ctx.shadowColor = col + 'cc';
+            ctx.shadowBlur = 16;
+        }
+
+        // Fill with slight vertical gradient
+        const g = ctx.createLinearGradient(sx, sy, sx, sy + h);
+        const rgb = hexToRgb(col);
+        const a = isH || isS ? 0.95 : 0.72;
+        g.addColorStop(0, `rgba(${rgb.r},${rgb.g},${rgb.b},${a})`);
+        g.addColorStop(1, `rgba(${Math.floor(rgb.r * 0.7)},${Math.floor(rgb.g * 0.7)},${Math.floor(rgb.b * 0.7)},${a})`);
+        roundRect(sx, sy, w, h, r);
+        ctx.fillStyle = g;
+        ctx.fill();
+        ctx.strokeStyle = isH || isS ? col : 'rgba(255,255,255,0.12)';
+        ctx.lineWidth = isH || isS ? 1.5 : 0.8;
+        ctx.stroke();
+
+        if (isH || isS) ctx.restore();
+
+        // Gap side hint (thin colored edge)
+        const side = gapSide(b.rot);
+        ctx.strokeStyle = 'rgba(108, 156, 255, 0.8)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        if (side === 'N') { ctx.moveTo(sx, sy); ctx.lineTo(sx + w, sy); }
+        if (side === 'S') { ctx.moveTo(sx, sy + h); ctx.lineTo(sx + w, sy + h); }
+        if (side === 'W') { ctx.moveTo(sx, sy); ctx.lineTo(sx, sy + h); }
+        if (side === 'E') { ctx.moveTo(sx + w, sy); ctx.lineTo(sx + w, sy + h); }
+        ctx.stroke();
+
+        if (sLbl && w > 22 && h > 14) {
+            ctx.fillStyle = 'rgba(255,255,255,0.95)';
+            const fs = Math.min(11, Math.max(8, Math.min(w, h) * 0.4));
+            ctx.font = `600 ${fs}px -apple-system, sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(b.tid, sx + w / 2, sy + h / 2);
+        }
+    }
+
+    // Warehouse outline (on top)
+    ctx.beginPath();
+    for (let i = 0; i < WH.length; i++) {
+        const [sx, sy] = ts(WH[i][0], WH[i][1]);
+        i === 0 ? ctx.moveTo(sx, sy) : ctx.lineTo(sx, sy);
+    }
+    ctx.closePath();
+    ctx.strokeStyle = '#8a93a8';
+    ctx.lineWidth = 1.8;
+    ctx.stroke();
+}
+
+/* Stats formatters */
+function fmtCov(c) { return (c * 100).toFixed(0) + '%'; }
+function fmtScore(s) { return s.toFixed(0); }
+function fmtPPL(p) { return p.toFixed(0); }
+
+function deltaHtml(cur, other, lowerIsBetter, fmt) {
+    if (other === null || other === undefined) return '';
+    const d = cur - other;
+    if (Math.abs(d) < 0.5 && fmt === fmtScore) return `<div class="delta flat">±0 vs ${fmt(other)}</div>`;
+    let cls = 'flat';
+    if (d > 0) cls = lowerIsBetter ? 'down' : 'up';
+    if (d < 0) cls = lowerIsBetter ? 'up' : 'down';
+    const sign = d > 0 ? '+' : '';
+    if (fmt === fmtCov) {
+        const dd = d * 100;
+        const s = dd > 0 ? '+' : '';
+        return `<div class="delta ${cls}">${s}${dd.toFixed(1)}pp vs ${fmt(other)}</div>`;
+    }
+    return `<div class="delta ${cls}">${sign}${fmt(d)} vs ${fmt(other)}</div>`;
+}
+
+function renderStats() {
+    const s = SOLUTIONS[activeIdx].stats;
+    const other = COMPARE ? SOLUTIONS[1 - activeIdx].stats : null;
+    const covClass = s.coverage > 0.6 ? 'green' : s.coverage > 0.4 ? 'orange' : 'red';
+    document.getElementById('statsGrid').innerHTML = `
+        <div class="stat">
+            <div class="value">${s.n_bays}</div>
+            <div class="label">Bays</div>
+            ${other ? deltaHtml(s.n_bays, other.n_bays, false, v => v.toFixed(0)) : ''}
+        </div>
+        <div class="stat">
+            <div class="value ${covClass}">${fmtCov(s.coverage)}</div>
+            <div class="label">Coverage</div>
+            ${other ? deltaHtml(s.coverage, other.coverage, false, fmtCov) : ''}
+        </div>
+        <div class="stat">
+            <div class="value">${fmtScore(s.score)}</div>
+            <div class="label">Score Q</div>
+            ${other ? deltaHtml(s.score, other.score, true, fmtScore) : ''}
+        </div>
+        <div class="stat">
+            <div class="value">${fmtPPL(s.price_per_load)}</div>
+            <div class="label">Price / Load</div>
+            ${other ? deltaHtml(s.price_per_load, other.price_per_load, true, fmtPPL) : ''}
+        </div>
+    `;
+    document.getElementById('caseBadge').textContent =
+        `${DATA.case}  ·  ${s.n_bays} bays  ·  Q=${fmtScore(s.score)}  ·  cov=${fmtCov(s.coverage)}`;
+}
+
+function renderBayList() {
+    const list = document.getElementById('bayList');
+    list.innerHTML = '';
+    document.getElementById('bayListHeader').textContent =
+        `Placed Bays (${BAYS.length})`;
+    BAYS.forEach((b, i) => {
+        const el = document.createElement('div');
+        el.className = 'bay-item';
+        el.dataset.idx = i;
+        el.innerHTML = `
+            <div class="bay-dot" style="background:${colorFor(b.tid)}"></div>
+            <div class="info">
+                <div class="name">Type ${b.tid} <span style="color:var(--text3)">#${i}</span></div>
+                <div class="detail">${b.w}×${b.d} @ (${Math.round(b.x)}, ${Math.round(b.y)}) ${b.rot}°</div>
+            </div>
+        `;
+        el.addEventListener('mouseenter', () => { hov2d = i; if (view3d) view3d.setHover(i); draw2d(); });
+        el.addEventListener('mouseleave', () => { hov2d = -1; if (view3d) view3d.setHover(-1); draw2d(); });
+        el.addEventListener('click', () => {
+            sel = sel === i ? -1 : i;
+            document.querySelectorAll('.bay-item').forEach(e => e.classList.remove('active'));
+            if (sel >= 0) {
+                el.classList.add('active');
+                if (view3d && viewMode === '3d') view3d.focusBay(i);
+            }
+            draw2d();
+            if (view3d) view3d.setSelected(sel);
+        });
+        list.appendChild(el);
+    });
+}
+
+function switchSolution(idx) {
+    activeIdx = idx;
+    BAYS = SOLUTIONS[activeIdx].bays;
+    hov2d = -1;
+    sel = -1;
+    renderStats();
+    renderBayList();
+    draw2d();
+    if (view3d) view3d.rebuildBays();
+}
+
+if (COMPARE) {
+    document.querySelectorAll('.switch-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.switch-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            switchSolution(parseInt(btn.dataset.sol));
+        });
+    });
+    document.addEventListener('keydown', (e) => {
+        if (document.activeElement.tagName === 'INPUT') return;
+        if (e.key === '1') {
+            switchSolution(0);
+            document.querySelectorAll('.switch-btn').forEach((b, i) => b.classList.toggle('active', i === 0));
+        } else if (e.key === '2') {
+            switchSolution(1);
+            document.querySelectorAll('.switch-btn').forEach((b, i) => b.classList.toggle('active', i === 1));
+        } else if (e.key === 'Tab') {
+            e.preventDefault();
+            const next = 1 - activeIdx;
+            switchSolution(next);
+            document.querySelectorAll('.switch-btn').forEach((b, i) => b.classList.toggle('active', i === next));
+        }
+    });
+}
+
+/* ── 2D canvas interaction ─────────────── */
+canvas2d.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const rect = canvas2d.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const z = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+    const [wx, wy] = tw(mx, my);
+    sc *= z;
+    const ch = canvas2d.height / devicePixelRatio;
+    ox = mx - wx * sc;
+    oy = -(my - ch) - wy * sc;
+    draw2d();
+}, { passive: false });
+
+canvas2d.addEventListener('mousedown', (e) => { drag = true; dx0 = e.clientX; dy0 = e.clientY; });
+canvas2d.addEventListener('mousemove', (e) => {
+    if (drag) {
+        ox += e.clientX - dx0; oy -= e.clientY - dy0;
+        dx0 = e.clientX; dy0 = e.clientY;
+        draw2d(); return;
+    }
+    const rect = canvas2d.getBoundingClientRect();
+    const [wx, wy] = tw(e.clientX - rect.left, e.clientY - rect.top);
+    let f = -1;
+    for (let i = BAYS.length - 1; i >= 0; i--) {
+        const b = BAYS[i];
+        if (wx >= b.x && wx <= b.x + b.w && wy >= b.y && wy <= b.y + b.d) { f = i; break; }
+    }
+    if (f !== hov2d) { hov2d = f; draw2d(); if (view3d) view3d.setHover(f); }
+    showTooltip(f, e);
+});
+canvas2d.addEventListener('mouseup', () => drag = false);
+canvas2d.addEventListener('mouseleave', () => { drag = false; tip.style.display = 'none'; });
+canvas2d.addEventListener('click', (e) => {
+    if (hov2d >= 0) {
+        sel = sel === hov2d ? -1 : hov2d;
+        document.querySelectorAll('.bay-item').forEach((el, i) => el.classList.toggle('active', i === sel));
+        if (sel >= 0) document.querySelector(`.bay-item[data-idx="${sel}"]`)?.scrollIntoView({ block: 'nearest' });
+        draw2d();
+        if (view3d) view3d.setSelected(sel);
+    }
+});
+
+function showTooltip(idx, e) {
+    if (idx < 0) { tip.style.display = 'none'; return; }
+    const b = BAYS[idx];
+    tip.style.display = 'block';
+    tip.style.left = (e.clientX + 14) + 'px';
+    tip.style.top = (e.clientY + 14) + 'px';
+    tip.innerHTML = `
+        <div class="hdr">
+            <div class="chip" style="background:${colorFor(b.tid)}"></div>
+            <b>Type ${b.tid}</b> <span class="dim">#${idx}</span>
+        </div>
+        ${b.w} × ${b.d} × ${b.h} mm<br>
+        <span class="dim">Position</span> (${Math.round(b.x)}, ${Math.round(b.y)})  ${b.rot}°<br>
+        <span class="dim">Gap</span> ${b.gap} mm<br>
+        <span class="dim">Price</span> ${b.pr}  <span class="dim">Loads</span> ${b.ld}
+    `;
+}
+
+document.getElementById('zoomIn').addEventListener('click', () => {
+    const ch = canvas2d.height / devicePixelRatio;
+    const cw = canvas2d.width / devicePixelRatio;
+    const [wx, wy] = tw(cw / 2, ch / 2);
+    sc *= 1.3;
+    ox = cw / 2 - wx * sc;
+    oy = -(ch / 2 - ch) - wy * sc;
+    draw2d();
+});
+document.getElementById('zoomOut').addEventListener('click', () => {
+    const ch = canvas2d.height / devicePixelRatio;
+    const cw = canvas2d.width / devicePixelRatio;
+    const [wx, wy] = tw(cw / 2, ch / 2);
+    sc /= 1.3;
+    ox = cw / 2 - wx * sc;
+    oy = -(ch / 2 - ch) - wy * sc;
+    draw2d();
+});
+document.getElementById('zoomFit').addEventListener('click', () => { fit2d(); draw2d(); });
+
+['showGaps', 'showObstacles', 'showLabels', 'showGrid'].forEach(id =>
+    document.getElementById(id).addEventListener('change', () => {
+        draw2d();
+        if (view3d) view3d.updateVisibility();
+    }));
+document.getElementById('showCeiling').addEventListener('change', () => { if (view3d) view3d.updateVisibility(); });
+document.getElementById('showAxes').addEventListener('change', () => { if (view3d) view3d.updateVisibility(); });
+
+/* ─────────────────────────────────────────────
+ * 3D VIEW
+ * ───────────────────────────────────────────── */
+class ThreeView {
+    constructor(container) {
+        this.container = container;
+        this.scene = new THREE.Scene();
+        this.scene.background = null;
+        // No fog — avoids fading geometry when zooming out to see the whole warehouse.
+
+        // Units are millimetres — typical warehouse is tens of thousands.
+        const aspect = container.clientWidth / Math.max(1, container.clientHeight);
+        this.camera = new THREE.PerspectiveCamera(45, aspect, 100, 200000);
+
+        this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+        this.renderer.setSize(container.clientWidth, container.clientHeight);
+        this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+        this.renderer.shadowMap.enabled = true;
+        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(this.renderer.domElement);
+
+        // Center the scene around origin — shift world coords by (-cx, -cy).
+        this.cx = (B.x0 + B.x1) / 2;
+        this.cy = (B.y0 + B.y1) / 2;
+        this.wx = B.x1 - B.x0;
+        this.wy = B.y1 - B.y0;
+
+        this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+        this.controls.enableDamping = true;
+        this.controls.dampingFactor = 0.08;
+        this.controls.minDistance = 500;
+        this.controls.maxDistance = 120000;
+        this.controls.maxPolarAngle = Math.PI / 2 - 0.02;
+
+        this._setIso();
+
+        // Lights
+        const amb = new THREE.AmbientLight(0xffffff, 0.55);
+        this.scene.add(amb);
+
+        const hemi = new THREE.HemisphereLight(0xbfd4ff, 0x20222a, 0.6);
+        this.scene.add(hemi);
+
+        const dir = new THREE.DirectionalLight(0xffffff, 0.9);
+        dir.position.set(this.wx * 0.4, this.wy * 0.3, 15000);
+        dir.castShadow = true;
+        dir.shadow.mapSize.set(2048, 2048);
+        const sh = Math.max(this.wx, this.wy);
+        dir.shadow.camera.left = -sh;
+        dir.shadow.camera.right = sh;
+        dir.shadow.camera.top = sh;
+        dir.shadow.camera.bottom = -sh;
+        dir.shadow.camera.near = 100;
+        dir.shadow.camera.far = 60000;
+        dir.shadow.bias = -0.0005;
+        this.scene.add(dir);
+        this.scene.add(dir.target);
+        dir.target.position.set(0, 0, 0);
+
+        // Subtle rim from the opposite side
+        const dir2 = new THREE.DirectionalLight(0x8ab8ff, 0.28);
+        dir2.position.set(-this.wx * 0.3, -this.wy * 0.4, 10000);
+        this.scene.add(dir2);
+
+        // Raycaster
+        this.raycaster = new THREE.Raycaster();
+        this.mouse = new THREE.Vector2();
+
+        // Groups
+        this.floorGroup = new THREE.Group(); this.scene.add(this.floorGroup);
+        this.obstacleGroup = new THREE.Group(); this.scene.add(this.obstacleGroup);
+        this.gapGroup = new THREE.Group(); this.scene.add(this.gapGroup);
+        this.bayGroup = new THREE.Group(); this.scene.add(this.bayGroup);
+        this.ceilingGroup = new THREE.Group(); this.scene.add(this.ceilingGroup);
+        this.axesHelper = new THREE.AxesHelper(Math.max(this.wx, this.wy) * 0.15);
+        this.axesHelper.position.set(-this.wx / 2 - 500, -this.wy / 2 - 500, 0);
+        this.axesHelper.visible = false;
+        this.scene.add(this.axesHelper);
+
+        this._buildStaticScene();
+        this.rebuildBays();
+
+        this._hoverIdx = -1;
+        this._selIdx = -1;
+        this._bayMeshes = [];
+
+        this.renderer.domElement.addEventListener('pointermove', (e) => this._onPointerMove(e));
+        this.renderer.domElement.addEventListener('click', (e) => this._onClick(e));
+
+        this._running = true;
+        this._animate();
+        window.addEventListener('resize', () => this._onResize());
+    }
+
+    // World coords (x, y, z) are in warehouse mm; y is depth, z is height.
+    // We rotate X-Y plane to XZ-facing by mapping (x, y, z) -> (x - cx, z, -(y - cy))
+    // i.e. scene Y = warehouse height (Z), scene Z = -(warehouse Y). This keeps
+    // warehouse X on the scene's X axis and gives a natural "floor" plane at y=0.
+    w2s(x, y, z = 0) {
+        return [x - this.cx, z, -(y - this.cy)];
+    }
+
+    _setIso() {
+        const d = Math.max(this.wx, this.wy) * 1.35;
+        this.camera.position.set(d * 0.6, d * 0.55, d * 0.8);
+        this.camera.lookAt(0, 0, 0);
+        this.controls.target.set(0, 0, 0);
+        this.controls.update();
+    }
+
+    setTopView() {
+        const d = Math.max(this.wx, this.wy) * 1.35;
+        this.camera.position.set(0.1, d, 0.1);
+        this.controls.target.set(0, 0, 0);
+        this.controls.update();
+    }
+    setFrontView() {
+        const d = Math.max(this.wx, this.wy) * 1.6;
+        this.camera.position.set(0, Math.min(d * 0.35, 12000), d * 0.9);
+        this.controls.target.set(0, 0, 0);
+        this.controls.update();
+    }
+    setIso() { this._setIso(); }
+
+    _ceilingHeightInRange(x0, x1) {
+        // Mimic solver.Ceiling.min_height_in_range
+        if (!CEIL.segments.length) return 5000;
+        let minH = Infinity;
+        for (const s of CEIL.segments) {
+            if (s.x1 <= x0 || s.x0 >= x1) continue;
+            minH = Math.min(minH, s.h);
+        }
+        if (!isFinite(minH)) {
+            // Fallback: height at x0
+            let h = CEIL.segments[0].h;
+            for (const s of CEIL.segments) if (s.x0 <= x0) h = s.h;
+            return h;
+        }
+        return minH;
+    }
+
+    _buildStaticScene() {
+        // Floor polygon (warehouse) via ShapeGeometry
+        const shape = new THREE.Shape();
+        for (let i = 0; i < WH.length; i++) {
+            const [sx, , sz] = this.w2s(WH[i][0], WH[i][1], 0);
+            if (i === 0) shape.moveTo(sx, -sz); else shape.lineTo(sx, -sz);
+        }
+        shape.closePath();
+        const floorGeo = new THREE.ShapeGeometry(shape);
+        const floorMat = new THREE.MeshStandardMaterial({
+            color: 0x1e2330, roughness: 0.95, metalness: 0.0,
+        });
+        const floor = new THREE.Mesh(floorGeo, floorMat);
+        floor.rotation.x = -Math.PI / 2;  // shape's Y maps to -Z; flip to floor plane
+        floor.position.y = 0;
+        floor.receiveShadow = true;
+        this.floorGroup.add(floor);
+
+        // Grid helper on floor
+        const gridSize = Math.max(this.wx, this.wy);
+        const step = Math.pow(10, Math.floor(Math.log10(gridSize))) / 2;
+        const divisions = Math.max(4, Math.round(gridSize / step));
+        const grid = new THREE.GridHelper(gridSize * 1.1, divisions, 0x3a4050, 0x2a2e38);
+        grid.position.y = 0.5;
+        grid.material.opacity = 0.35;
+        grid.material.transparent = true;
+        this.floorGroup.add(grid);
+
+        // Warehouse outline — coherent with the floor's coordinate system.
+        // The floor is built as a ShapeGeometry and rotated by -PI/2 around X,
+        // so a shape point (sx, y - cy) lands at world (sx, 0, -(y - cy)).
+        // The outline therefore must use the same world Z as w2s returns (=sz).
+        const points = [];
+        for (let i = 0; i < WH.length; i++) {
+            const [sx, , sz] = this.w2s(WH[i][0], WH[i][1], 0);
+            points.push(new THREE.Vector3(sx, 5, sz));
+        }
+        points.push(points[0].clone());
+        const outlineGeo = new THREE.BufferGeometry().setFromPoints(points);
+        const outline = new THREE.Line(outlineGeo, new THREE.LineBasicMaterial({
+            color: 0x8a93a8, linewidth: 2,
+        }));
+        this.floorGroup.add(outline);
+
+        // Obstacles — dark extruded columns up to local ceiling
+        for (const o of OBS) {
+            const h = this._ceilingHeightInRange(o.x, o.x + o.w);
+            const geo = new THREE.BoxGeometry(o.w, h, o.h);
+            const mat = new THREE.MeshStandardMaterial({
+                color: 0x55606e, roughness: 0.85, metalness: 0.1,
+            });
+            const m = new THREE.Mesh(geo, mat);
+            const [sx, , sz] = this.w2s(o.x + o.w / 2, o.y + o.h / 2, 0);
+            m.position.set(sx, h / 2, sz);
+            m.castShadow = true;
+            m.receiveShadow = true;
+            this.obstacleGroup.add(m);
+
+            // Red-tinted outline at top to stay coherent with 2D
+            const edge = new THREE.LineSegments(
+                new THREE.EdgesGeometry(geo),
+                new THREE.LineBasicMaterial({ color: 0xff5d66, transparent: true, opacity: 0.4 })
+            );
+            edge.position.copy(m.position);
+            this.obstacleGroup.add(edge);
+        }
+
+        // Ceiling mesh — piecewise box per segment, translucent
+        for (const s of CEIL.segments) {
+            const w = s.x1 - s.x0;
+            if (w <= 0) continue;
+            // Ceiling only above the warehouse footprint, but we can
+            // render it across [y0, y1] and let it be visually clipped.
+            const d = this.wy;
+            const thickness = 40;
+            const geo = new THREE.BoxGeometry(w, thickness, d);
+            const mat = new THREE.MeshStandardMaterial({
+                color: 0xffb057,
+                transparent: true,
+                opacity: 0.13,
+                side: THREE.DoubleSide,
+                roughness: 1.0,
+            });
+            const m = new THREE.Mesh(geo, mat);
+            const [sx, , sz] = this.w2s(s.x0 + w / 2, (B.y0 + B.y1) / 2, 0);
+            m.position.set(sx, s.h, sz);
+            this.ceilingGroup.add(m);
+
+            // Top edge outline for clarity
+            const edge = new THREE.LineSegments(
+                new THREE.EdgesGeometry(geo),
+                new THREE.LineBasicMaterial({ color: 0xffb057, transparent: true, opacity: 0.35 })
+            );
+            edge.position.copy(m.position);
+            this.ceilingGroup.add(edge);
+        }
+    }
+
+    rebuildBays() {
+        // Clear existing bay + gap meshes
+        while (this.bayGroup.children.length) {
+            const m = this.bayGroup.children.pop();
+            m.geometry?.dispose();
+            m.material?.dispose?.();
+        }
+        while (this.gapGroup.children.length) {
+            const m = this.gapGroup.children.pop();
+            m.geometry?.dispose();
+            m.material?.dispose?.();
+        }
+        this._bayMeshes = [];
+
+        for (let i = 0; i < BAYS.length; i++) {
+            const b = BAYS[i];
+            const colHex = colorFor(b.tid);
+            const col = new THREE.Color(colHex);
+
+            // Bay (extruded rectangle)
+            const geo = new THREE.BoxGeometry(b.w, b.h, b.d);
+            const mat = new THREE.MeshStandardMaterial({
+                color: col,
+                roughness: 0.42,
+                metalness: 0.12,
+                emissive: col.clone().multiplyScalar(0.05),
+            });
+            const mesh = new THREE.Mesh(geo, mat);
+            const [sx, , sz] = this.w2s(b.x + b.w / 2, b.y + b.d / 2, 0);
+            mesh.position.set(sx, b.h / 2, sz);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            mesh.userData = { idx: i, baseColor: col.clone(), baseEmissive: mat.emissive.clone() };
+            this.bayGroup.add(mesh);
+            this._bayMeshes.push(mesh);
+
+            // Outline (subtle)
+            const edge = new THREE.LineSegments(
+                new THREE.EdgesGeometry(geo),
+                new THREE.LineBasicMaterial({
+                    color: 0x000000, transparent: true, opacity: 0.22,
+                })
+            );
+            edge.position.copy(mesh.position);
+            this.bayGroup.add(edge);
+
+            // Gap as translucent floor slab
+            const gapGeo = new THREE.BoxGeometry(b.gw, 20, b.gh);
+            const gapMat = new THREE.MeshStandardMaterial({
+                color: 0x6c9cff,
+                transparent: true,
+                opacity: 0.22,
+                roughness: 1.0,
+            });
+            const gm = new THREE.Mesh(gapGeo, gapMat);
+            const [gsx, , gsz] = this.w2s(b.gx + b.gw / 2, b.gy + b.gh / 2, 0);
+            gm.position.set(gsx, 10, gsz);
+            this.gapGroup.add(gm);
+
+            // Dashed outline on the floor to show gap extents
+            const gapEdge = new THREE.LineSegments(
+                new THREE.EdgesGeometry(new THREE.BoxGeometry(b.gw, 0.1, b.gh)),
+                new THREE.LineDashedMaterial({
+                    color: 0x6c9cff, dashSize: 120, gapSize: 80,
+                    transparent: true, opacity: 0.55,
+                })
+            );
+            gapEdge.position.set(gsx, 12, gsz);
+            gapEdge.computeLineDistances();
+            this.gapGroup.add(gapEdge);
+        }
+        this.updateVisibility();
+    }
+
+    updateVisibility() {
+        const sGap = document.getElementById('showGaps').checked;
+        const sObs = document.getElementById('showObstacles').checked;
+        const sCeil = document.getElementById('showCeiling').checked;
+        const sAx = document.getElementById('showAxes').checked;
+        const sGrid = document.getElementById('showGrid').checked;
+        this.gapGroup.visible = sGap;
+        this.obstacleGroup.visible = sObs;
+        this.ceilingGroup.visible = sCeil;
+        this.axesHelper.visible = sAx;
+        // Toggle grid helper
+        this.floorGroup.children.forEach(c => {
+            if (c.isGridHelper) c.visible = sGrid;
+        });
+    }
+
+    setHover(idx) {
+        this._hoverIdx = idx;
+        this._refreshHighlights();
+    }
+
+    setSelected(idx) {
+        this._selIdx = idx;
+        this._refreshHighlights();
+    }
+
+    _refreshHighlights() {
+        for (let i = 0; i < this._bayMeshes.length; i++) {
+            const m = this._bayMeshes[i];
+            const isH = i === this._hoverIdx;
+            const isS = i === this._selIdx;
+            if (isH || isS) {
+                m.material.emissive = m.userData.baseColor.clone().multiplyScalar(isS ? 0.5 : 0.3);
+                m.scale.setScalar(1.005);
+            } else {
+                m.material.emissive = m.userData.baseEmissive.clone();
+                m.scale.setScalar(1.0);
+            }
+        }
+    }
+
+    focusBay(idx) {
+        if (idx < 0 || idx >= BAYS.length) return;
+        const b = BAYS[idx];
+        const [sx, , sz] = this.w2s(b.x + b.w / 2, b.y + b.d / 2, 0);
+        const target = new THREE.Vector3(sx, b.h / 2, sz);
+        const d = Math.max(b.w, b.d, b.h) * 3 + 1500;
+        const camTarget = new THREE.Vector3(sx + d * 0.7, target.y + d * 0.6, sz + d * 0.7);
+        this._animateCamera(camTarget, target, 600);
+    }
+
+    _animateCamera(toPos, toTarget, duration) {
+        const fromPos = this.camera.position.clone();
+        const fromTarget = this.controls.target.clone();
+        const start = performance.now();
+        const step = () => {
+            const t = Math.min(1, (performance.now() - start) / duration);
+            const k = 1 - Math.pow(1 - t, 3);  // easeOutCubic
+            this.camera.position.lerpVectors(fromPos, toPos, k);
+            this.controls.target.lerpVectors(fromTarget, toTarget, k);
+            this.controls.update();
+            if (t < 1) requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+    }
+
+    _onPointerMove(e) {
+        const rect = this.renderer.domElement.getBoundingClientRect();
+        this.mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+        this.mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+        this.raycaster.setFromCamera(this.mouse, this.camera);
+        const hits = this.raycaster.intersectObjects(this._bayMeshes, false);
+        const idx = hits.length ? hits[0].object.userData.idx : -1;
+        if (idx !== this._hoverIdx) {
+            hov2d = idx;
+            this.setHover(idx);
+        }
+        showTooltip(idx, e);
+    }
+
+    _onClick(e) {
+        if (this._hoverIdx < 0) return;
+        const i = this._hoverIdx;
+        sel = sel === i ? -1 : i;
+        this.setSelected(sel);
+        document.querySelectorAll('.bay-item').forEach((el, j) => el.classList.toggle('active', j === sel));
+        if (sel >= 0) document.querySelector(`.bay-item[data-idx="${sel}"]`)?.scrollIntoView({ block: 'nearest' });
+        draw2d();
+    }
+
+    _onResize() {
+        const w = this.container.clientWidth;
+        const h = this.container.clientHeight;
+        this.camera.aspect = w / Math.max(1, h);
+        this.camera.updateProjectionMatrix();
+        this.renderer.setSize(w, h);
+    }
+
+    _animate() {
+        if (!this._running) return;
+        this.controls.update();
+        this.renderer.render(this.scene, this.camera);
+        requestAnimationFrame(() => this._animate());
+    }
+}
+
+let view3d = null;
+function ensureThreeView() {
+    if (view3d) { view3d._onResize(); return; }
+    const el = document.getElementById('canvas3d');
+    view3d = new ThreeView(el);
+}
+
+/* ── Mode toggle ───────────────────────────── */
+const stage = document.getElementById('stage');
+let page = 'scene';  // 'scene' | 'catalog'
+
+function applyStageClasses() {
+    stage.classList.remove('mode-2d', 'mode-3d', 'mode-catalog');
+    if (page === 'catalog') {
+        stage.classList.add('mode-catalog');
+    } else {
+        stage.classList.add(viewMode === '3d' ? 'mode-3d' : 'mode-2d');
+    }
+    const is3d = viewMode === '3d';
+    const isScene = page === 'scene';
+    // Hide 2D/3D toggle when in Catalog page (catalog cards are always 2D)
+    document.getElementById('modeToggle').style.display = isScene ? '' : 'none';
+    document.getElementById('float2d').style.display = isScene && !is3d ? '' : 'none';
+    document.getElementById('float3d').style.display = isScene && is3d ? '' : 'none';
+    document.getElementById('legend3d').style.display = isScene && is3d ? '' : 'none';
+    document.querySelectorAll('.toggle[data-mode="3d"]').forEach(el =>
+        el.style.display = isScene && is3d ? '' : 'none'
+    );
+    if (page === 'scene' && is3d) ensureThreeView();
+    if (page === 'catalog') renderCatalog();
+}
+
+document.querySelectorAll('#modeToggle .vmode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const mode = btn.dataset.mode;
+        if (mode === viewMode) return;
+        viewMode = mode;
+        document.querySelectorAll('#modeToggle .vmode-btn').forEach(b => b.classList.toggle('active', b === btn));
+        applyStageClasses();
+    });
+});
+
+document.querySelectorAll('#pageToggle .vmode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const p = btn.dataset.page;
+        if (p === page) return;
+        page = p;
+        document.querySelectorAll('#pageToggle .vmode-btn').forEach(b => b.classList.toggle('active', b === btn));
+        applyStageClasses();
+    });
+});
+
+// Hide 3D-only controls in 2D mode initially
+document.querySelectorAll('.toggle[data-mode="3d"]').forEach(el => el.style.display = 'none');
+
+/* ── Catalog view ──────────────────────────── */
+let _catalogBuilt = false;
+
+function renderCatalog() {
+    const grid = document.getElementById('catalogGrid');
+    document.getElementById('catalogCount').textContent =
+        `${BAY_TYPES.length} type${BAY_TYPES.length === 1 ? '' : 's'}`;
+    if (_catalogBuilt) return;
+    grid.innerHTML = '';
+    BAY_TYPES.forEach((bt, idx) => {
+        const card = document.createElement('div');
+        card.className = 'catalog-card';
+        card.setAttribute('tabindex', '0');
+        const col = colorFor(bt.id);
+        card.innerHTML = `
+            <div class="catalog-preview" data-idx="${idx}">
+                <div class="catalog-chip" style="background:${col}"></div>
+                <div class="catalog-id">ID ${bt.id}</div>
+                <div class="catalog-hint">Click for 3D</div>
+            </div>
+            <div class="catalog-body">
+                <div class="catalog-title">Bay Type ${bt.id}</div>
+                <div class="catalog-dims">${bt.w} × ${bt.d} × ${bt.h} mm</div>
+                <div class="catalog-meta">
+                    <div><b>Gap</b> ${bt.gap} mm</div>
+                    <div><b>Loads</b> ${bt.ld}</div>
+                    <div><b>Price</b> ${bt.pr}</div>
+                    <div><b>€/load</b> ${(bt.pr / Math.max(1, bt.ld)).toFixed(1)}</div>
+                </div>
+            </div>
+        `;
+        const preview = card.querySelector('.catalog-preview');
+        renderCatalogItem2D(preview, bt);
+        card.addEventListener('click', () => openCatalogModal(bt));
+        card.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                openCatalogModal(bt);
+            }
+        });
+        grid.appendChild(card);
+    });
+    _catalogBuilt = true;
+}
+
+function renderCatalogItem2D(container, bt) {
+    const c = document.createElement('canvas');
+    container.appendChild(c);
+    const draw = () => {
+        const r = container.getBoundingClientRect();
+        if (r.width <= 0 || r.height <= 0) return;
+        c.width = r.width * devicePixelRatio;
+        c.height = r.height * devicePixelRatio;
+        c.style.width = r.width + 'px';
+        c.style.height = r.height + 'px';
+        const cx = c.getContext('2d');
+        cx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+        const w = r.width, h = r.height;
+        cx.clearRect(0, 0, w, h);
+
+        // Fit body + gap preserving the true aspect ratio
+        const pad = 26;
+        const totalW = bt.w;
+        const totalH = bt.d + bt.gap;
+        const s = Math.min((w - pad * 2) / totalW, (h - pad * 2) / totalH);
+        const bw = bt.w * s, bd = bt.d * s, bg = bt.gap * s;
+        const x0 = (w - bw) / 2;
+        const y0 = (h - (bd + bg)) / 2;
+
+        // Gap (north of body)
+        cx.fillStyle = 'rgba(108, 156, 255, 0.12)';
+        cx.fillRect(x0, y0, bw, bg);
+        cx.setLineDash([4, 4]);
+        cx.strokeStyle = 'rgba(108, 156, 255, 0.45)';
+        cx.lineWidth = 1;
+        cx.strokeRect(x0, y0, bw, bg);
+        cx.setLineDash([]);
+
+        // Body
+        const col = colorFor(bt.id);
+        const rgb = hexToRgb(col);
+        const g = cx.createLinearGradient(x0, y0 + bg, x0, y0 + bg + bd);
+        g.addColorStop(0, `rgba(${rgb.r},${rgb.g},${rgb.b},0.9)`);
+        g.addColorStop(1, `rgba(${Math.floor(rgb.r * 0.7)},${Math.floor(rgb.g * 0.7)},${Math.floor(rgb.b * 0.7)},0.9)`);
+        const r2 = Math.min(3, bw / 6, bd / 6);
+        cx.beginPath();
+        cx.moveTo(x0 + r2, y0 + bg);
+        cx.lineTo(x0 + bw - r2, y0 + bg);
+        cx.arcTo(x0 + bw, y0 + bg, x0 + bw, y0 + bg + r2, r2);
+        cx.lineTo(x0 + bw, y0 + bg + bd - r2);
+        cx.arcTo(x0 + bw, y0 + bg + bd, x0 + bw - r2, y0 + bg + bd, r2);
+        cx.lineTo(x0 + r2, y0 + bg + bd);
+        cx.arcTo(x0, y0 + bg + bd, x0, y0 + bg + bd - r2, r2);
+        cx.lineTo(x0, y0 + bg + r2);
+        cx.arcTo(x0, y0 + bg, x0 + r2, y0 + bg, r2);
+        cx.closePath();
+        cx.fillStyle = g; cx.fill();
+        cx.strokeStyle = 'rgba(255,255,255,0.15)';
+        cx.lineWidth = 1; cx.stroke();
+
+        if (bg > 14) {
+            cx.fillStyle = 'rgba(108, 156, 255, 0.85)';
+            cx.font = '600 10px -apple-system, sans-serif';
+            cx.textAlign = 'center';
+            cx.textBaseline = 'middle';
+            cx.fillText('gap', x0 + bw / 2, y0 + bg / 2);
+        }
+        cx.fillStyle = 'rgba(255,255,255,0.75)';
+        cx.font = '500 10px ui-monospace, Menlo, monospace';
+        cx.textAlign = 'center';
+        cx.textBaseline = 'top';
+        cx.fillText(`${bt.w} mm`, x0 + bw / 2, y0 + bg + bd + 4);
+        cx.save();
+        cx.translate(x0 - 6, y0 + bg + bd / 2);
+        cx.rotate(-Math.PI / 2);
+        cx.textBaseline = 'bottom';
+        cx.fillText(`${bt.d} mm`, 0, 0);
+        cx.restore();
+    };
+    draw();
+    new ResizeObserver(draw).observe(container);
+}
+
+/* ── Catalog 3D modal ──────────────────────── */
+let _modal3dState = null;
+
+function openCatalogModal(bt) {
+    const overlay = document.getElementById('catalogModal');
+    const col = colorFor(bt.id);
+    document.getElementById('modalChip').style.background = col;
+    document.getElementById('modalTitle').textContent = `Bay Type ${bt.id}`;
+    document.getElementById('modalInfo').innerHTML = `
+        <div class="row"><div class="k">ID</div><div class="v">${bt.id}</div></div>
+        <div class="row"><div class="k">Width</div><div class="v">${bt.w} mm</div></div>
+        <div class="row"><div class="k">Depth</div><div class="v">${bt.d} mm</div></div>
+        <div class="row"><div class="k">Height</div><div class="v">${bt.h} mm</div></div>
+        <div class="row"><div class="k">Gap</div><div class="v">${bt.gap} mm</div></div>
+        <div class="row"><div class="k">Loads</div><div class="v">${bt.ld}</div></div>
+        <div class="row"><div class="k">Price</div><div class="v">${bt.pr}</div></div>
+        <div class="row"><div class="k">€ / Load</div><div class="v">${(bt.pr / Math.max(1, bt.ld)).toFixed(2)}</div></div>
+        <div class="row"><div class="k">Footprint</div><div class="v">${(bt.w * bt.d / 1e6).toFixed(2)} m²</div></div>
+    `;
+    overlay.classList.add('open');
+    // Build 3D once the container has dimensions
+    requestAnimationFrame(() => mountModal3D(bt));
+}
+
+function closeCatalogModal() {
+    document.getElementById('catalogModal').classList.remove('open');
+    if (_modal3dState) {
+        try { _modal3dState.dispose(); } catch (e) { /* ignore */ }
+        _modal3dState = null;
+    }
+}
+
+function mountModal3D(bt) {
+    if (_modal3dState) { try { _modal3dState.dispose(); } catch (e) {} _modal3dState = null; }
+    const container = document.getElementById('modal3d');
+    const r0 = container.getBoundingClientRect();
+
+    const scene = new THREE.Scene();
+    scene.background = null;
+    const aspect = r0.width / Math.max(1, r0.height);
+    const camera = new THREE.PerspectiveCamera(40, aspect, 1, 400000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(r0.width, r0.height);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    container.appendChild(renderer.domElement);
+    renderer.domElement.style.width = '100%';
+    renderer.domElement.style.height = '100%';
+    renderer.domElement.style.display = 'block';
+
+    // Lights
+    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+    scene.add(new THREE.HemisphereLight(0xbfd4ff, 0x20222a, 0.6));
+    const dir = new THREE.DirectionalLight(0xffffff, 0.9);
+    dir.position.set(bt.w, bt.h * 2 + 2000, bt.d);
+    scene.add(dir);
+
+    // Floor + grid
+    const floorSize = Math.max(bt.w, bt.d) * 2.4;
+    const floor = new THREE.Mesh(
+        new THREE.CircleGeometry(floorSize / 2, 64),
+        new THREE.MeshStandardMaterial({ color: 0x1a1e2a, roughness: 0.95 })
+    );
+    floor.rotation.x = -Math.PI / 2;
+    scene.add(floor);
+    const grid = new THREE.GridHelper(floorSize, 12, 0x2a2e38, 0x20242e);
+    grid.position.y = 1;
+    scene.add(grid);
+
+    // Body
+    const col = new THREE.Color(colorFor(bt.id));
+    const bodyGeo = new THREE.BoxGeometry(bt.w, bt.h, bt.d);
+    const bodyMat = new THREE.MeshStandardMaterial({
+        color: col, roughness: 0.55, metalness: 0.15,
+        emissive: col.clone().multiplyScalar(0.06),
+    });
+    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    body.position.set(0, bt.h / 2, 0);
+    scene.add(body);
+
+    const edges = new THREE.LineSegments(
+        new THREE.EdgesGeometry(bodyGeo),
+        new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.2 })
+    );
+    edges.position.copy(body.position);
+    scene.add(edges);
+
+    // Gap slab
+    let gapGeo = null, gapEdgesGeo = null;
+    if (bt.gap > 0) {
+        gapGeo = new THREE.BoxGeometry(bt.w, Math.max(1, bt.h * 0.04), bt.gap);
+        const gap = new THREE.Mesh(gapGeo, new THREE.MeshBasicMaterial({
+            color: 0x6c9cff, transparent: true, opacity: 0.18,
+        }));
+        gap.position.set(0, 1, -bt.d / 2 - bt.gap / 2);
+        scene.add(gap);
+        gapEdgesGeo = new THREE.BoxGeometry(bt.w, 1, bt.gap);
+        const gapEdges = new THREE.LineSegments(
+            new THREE.EdgesGeometry(gapEdgesGeo),
+            new THREE.LineBasicMaterial({
+                color: 0x6c9cff, transparent: true, opacity: 0.6,
+            })
+        );
+        gapEdges.position.set(0, 1, -bt.d / 2 - bt.gap / 2);
+        scene.add(gapEdges);
+    }
+
+    // Camera + OrbitControls
+    const d = Math.max(bt.w, bt.d, bt.h) * 2.4 + 1500;
+    camera.position.set(d * 0.8, d * 0.7, d * 1.0);
+    camera.lookAt(0, bt.h / 2, 0);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, bt.h / 2, 0);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.minDistance = Math.max(bt.w, bt.d, bt.h) * 0.6;
+    controls.maxDistance = d * 4;
+    controls.maxPolarAngle = Math.PI / 2 - 0.02;
+    controls.update();
+
+    let running = true;
+    const animate = () => {
+        if (!running) return;
+        controls.update();
+        renderer.render(scene, camera);
+        requestAnimationFrame(animate);
+    };
+    requestAnimationFrame(animate);
+
+    const ro = new ResizeObserver(() => {
+        const r = container.getBoundingClientRect();
+        if (r.width <= 0 || r.height <= 0) return;
+        camera.aspect = r.width / r.height;
+        camera.updateProjectionMatrix();
+        renderer.setSize(r.width, r.height);
+    });
+    ro.observe(container);
+
+    _modal3dState = {
+        dispose() {
+            running = false;
+            ro.disconnect();
+            controls.dispose();
+            renderer.dispose();
+            bodyGeo.dispose();
+            bodyMat.dispose();
+            if (gapGeo) gapGeo.dispose();
+            if (gapEdgesGeo) gapEdgesGeo.dispose();
+            if (renderer.domElement.parentElement === container) {
+                container.removeChild(renderer.domElement);
+            }
+        }
+    };
+}
+
+document.getElementById('modalClose').addEventListener('click', closeCatalogModal);
+document.getElementById('catalogModal').addEventListener('click', (e) => {
+    if (e.target.id === 'catalogModal') closeCatalogModal();
+});
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && document.getElementById('catalogModal').classList.contains('open')) {
+        closeCatalogModal();
+    }
+});
+
+// 3D view buttons
+document.getElementById('view3dTop').addEventListener('click', () => view3d?.setTopView());
+document.getElementById('view3dIso').addEventListener('click', () => view3d?.setIso());
+document.getElementById('view3dFront').addEventListener('click', () => view3d?.setFrontView());
+
+// Initial render
+renderStats();
+renderBayList();
+resize2d();
+window.addEventListener('resize', () => {
+    resize2d();
+    if (view3d) view3d._onResize();
+});
+</script>
+
+</body>
+</html>

@@ -81,47 +81,26 @@ ceiling approximated as its minimum) and un-transposes the placements
 afterward. This single addition captures most of the Case 0 win, where
 the L-shape packs better when strips run along Y instead of X.
 
-### The six greedy criteria
+### The greedy criteria (pruned set)
 
-At each position the row-packer scores every bay that fits and places the
-highest-scoring one. The six scoring functions approach the problem from
-different angles:
+At each position the row-packer scores every bay that fits and places
+the highest-scoring one. The module originally shipped with six scoring
+functions; `benchmark_criteria.py` showed that only two mattered in
+practice and the rest were redundant or harmful, so the active set is:
 
 | Criterion | Formula | Intent |
 |-----------|---------|--------|
-| `eff×width` | `area × loads / price × ew` | Balanced default |
-| `cov-heavy` | `ew² × loads / price` | Favor wider bays |
-| `loads/$` | `loads / price` | Cheapest loads first |
-| `width` | `ew` | Pure coverage |
-| `big-first` | `ew × 1000 + loads/price` | Biggest fits, tiebreak cheapness |
-| `area/$` | `area / price` | Area per currency |
+| `eff×width` | `area × loads / price × ew` | Balanced default — wins on 16/17 cases |
+| `loads/$`   | `loads / price`             | Recovers Case15_mega (cheapest-load-first is better there) |
 
-`ew` is the bay's effective width along the row. Different criteria win
-on different cases. On Cases 1/2/3/4/6/7/8/9, `eff×width` wins. On Case 0
-the vertical-orientation pass with `eff×width` wins. The criteria variety
-is cheap insurance.
-
-### Anchor-based gap filler
-
-After the best strip-pack, there are usually small leftover pockets that
-didn't line up with the strip grid — corners of the warehouse, spaces
-next to obstacles, the last bit of a row. The gap-filler tries to insert
-extra bays into those pockets:
-
-1. **Collect anchor points**: all corners of placed bays, all corners of
-   placed bays' gaps, all obstacle corners, and all warehouse vertices.
-2. **Extend the anchor set** by subtracting each candidate bay's width
-   and depth from every anchor. This way, if an anchor is at a
-   top-right corner and a bay would fit with its bottom-left corner at
-   `(anchor_x − bay_width, anchor_y − bay_depth)`, that position is tried.
-3. **For each anchor, try each bay type at each rotation**. If a candidate
-   placement strictly reduces Q (not just fits, but improves the metric),
-   keep it. Repeat in passes until no placement helps.
+`ew` is the bay's effective width along the row. The four dropped
+criteria (`cov-heavy`, `width`, `big-first`, `area/$`) never beat
+`eff×width` alone and two of them (`width`, `area/$`) hurt Q on several
+cases; see `traces/criteria_benchmark.csv`.
 
 ### Two packing paths
 
-The solver actually runs two of these strip-pack-plus-filler pipelines and
-keeps the better result:
+The solver runs two strip-pack pipelines and keeps the better result:
 
 **Path A — Whole-warehouse pack**
 Treat the entire warehouse polygon as one strip grid. Run the search
@@ -138,8 +117,7 @@ Placements from already-processed regions are fed to the next region as
 obstacles, preventing overlaps at region boundaries.
 
 Try a few region orderings (largest-first, by Y then X, as-given) and
-keep the best. Then apply the anchor-based gap-filler to the full
-result.
+keep the best result.
 
 This path wins when the warehouse decomposes cleanly into large
 rectangles that want different strip orientations — Case 3 (cross) and
@@ -152,22 +130,40 @@ instead.
 `greedy_solver.py` runs both paths with a shared time budget, then writes
 out whichever produced the lower Q. The two-path design is the main
 structural insight: neither path dominates across all cases, but their
-union beats either one alone and beats the complex baseline solver on
-every case.
+union beats either one alone.
+
+### What used to live here: the anchor-based gap filler
+
+The original greedy closed each path with a deterministic anchor-based
+filler: collect every corner of every placed bay, obstacle and warehouse
+vertex, extend the set by bay dimensions, and try every (bay type ×
+rotation) at every anchor, accepting a placement only if it strictly
+improved Q. It was removed in favor of letting LNS+SA handle residual
+gaps. The decision is documented by `traces/filler_vs_sa.csv`:
+
+- Filler cost: ~75 s across the 17 cases.
+- Filler Q-gain: ~+1664 pts total, almost entirely on Case0 (+1632).
+- LNS+SA applied to filler-less greedy output: −4211 pts of Q total
+  vs the filler baseline; −4067 on Case15_mega alone.
+- Running LNS after keeping the filler vs after removing it: ΔQ ≈ −20
+  total — indistinguishable.
+
+The filler was doing work LNS+SA already does better, and burning time
+LNS could use. Greedy is now purely constructive.
 
 ### Why this works (and why it's simple)
 
 - **Alternating-gap strip packing is near-optimal on rectangular
   sub-regions** — aisles share space automatically, no fancy search
   needed.
-- **The search matrix is small enough to enumerate exhaustively**. Every
-  combination runs in tens of milliseconds. Worst case ≈100 combinations ×
-  10ms = 1s per case.
+- **The search matrix is small enough to enumerate exhaustively**. After
+  pruning to 2 criteria it is ~16 combinations, each a few ms.
 - **Region decomposition gives the solver "for free" the ability to use
   different orientations in different parts of the warehouse**, which is
   otherwise very expensive to search for.
-- **The anchor-based gap-filler is the only non-trivial step**, and even
-  it is deterministic and exhaustive within its anchor set.
+- **Refinement is delegated to LNS+SA** (`lns_sa.py`), which uses
+  FFT-based convolution on bitmaps to propose placements in the leftover
+  space and Simulated Annealing to escape local optima.
 
 ## Results
 

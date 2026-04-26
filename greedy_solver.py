@@ -9,14 +9,16 @@ A deliberately simple, deterministic solver with two complementary paths:
    For each candidate (row-depth × start-rotation × greedy-criterion ×
    horizontal/vertical orientation), do one left-to-right strip-pack with
    alternating-gap rows. Keep the combination with lowest Q.
-   Then run an anchor-based gap-filler.
 
 2. Region decomposition pass:
    Slice the warehouse (minus obstacles) into maximal axis-aligned
    rectangles. Pack each region independently with its own best
-   orientation. Run the anchor-based gap-filler.
+   orientation.
 
-Return whichever pass produced the lower Q.
+Return whichever pass produced the lower Q. The anchor-based gap-filler
+that used to close out each path was removed after benchmarking showed
+LNS+SA downstream recovers its gains for a fraction of the cost
+(see traces/filler_vs_sa.csv).
 
 No simulated annealing. No bitmaps. No local search. Deterministic.
 
@@ -194,13 +196,17 @@ def crit_area_per_price(bt: BayType, ew: float) -> float:
     return bt.area / bt.price
 
 
+# Pruned set ("moderate" option from benchmark_criteria.py).
+# Benchmark over 17 cases (traces/criteria_benchmark.csv) showed:
+#   * 'eff×width' wins or ties on 16 / 17 cases.
+#   * 'loads/$'   is the only criterion needed to recover Case15_mega.
+#   * 'cov-heavy', 'big-first' are redundant with 'eff×width' everywhere.
+#   * 'width', 'area/$' never win and sometimes hurt Q a lot.
+# Cutting from 6 → 2 criteria saves ~34% wall time with no Q regression.
+# Unpruned definitions remain above if we ever want to re-enable them.
 CRITERIA: List[Tuple[str, Callable[[BayType, float], float]]] = [
     ('eff×width', crit_efficiency_x_width),
-    ('cov-heavy', crit_coverage_heavy),
     ('loads/$',   crit_loads_per_price),
-    ('width',     crit_width),
-    ('big-first', crit_biggest_then_cheap),
-    ('area/$',    crit_area_per_price),
 ]
 
 
@@ -423,87 +429,26 @@ def _transpose_placed(pb: PlacedBay) -> PlacedBay:
 
 
 # ─────────────────────────────────────────────
-# Deterministic gap-filler
+# Deterministic gap-filler — REMOVED
 # ─────────────────────────────────────────────
-
-def fill_gaps_deterministic(
-    engine: FastCollisionEngine,
-    bay_types: List[BayType],
-    warehouse: Polygon,
-    usable_area_val: float,
-    time_budget: float,
-) -> None:
-    """Anchor-based gap filler. Deterministic: same input → same output.
-
-    Anchor set = bay corners ∪ obstacle corners ∪ warehouse vertices,
-    plus corners shifted by each candidate bay's width/depth so that the
-    bay's opposite corner lands on an anchor.
-    """
-    start_time = time.time()
-
-    # Build anchor set
-    anchors = set()
-    # Bay corners
-    for ab, ag in zip(engine.body_aabbs, engine.gap_aabbs):
-        for aabb in (ab, ag):
-            anchors.add((aabb.x0, aabb.y0))
-            anchors.add((aabb.x1, aabb.y0))
-            anchors.add((aabb.x0, aabb.y1))
-            anchors.add((aabb.x1, aabb.y1))
-    # Obstacle corners
-    for ob in engine.obstacle_aabbs:
-        anchors.add((ob.x0, ob.y0))
-        anchors.add((ob.x1, ob.y0))
-        anchors.add((ob.x0, ob.y1))
-        anchors.add((ob.x1, ob.y1))
-    # Warehouse vertices
-    wx, wy = warehouse.exterior.xy
-    for i in range(len(wx)):
-        anchors.add((wx[i], wy[i]))
-
-    # Extend anchors by subtracting each candidate bay dimension so the
-    # opposite corner of a new bay aligns to a known anchor.
-    extended = set(anchors)
-    for bt in bay_types:
-        for dx, dy in [(bt.width, bt.depth), (bt.depth, bt.width),
-                       (-bt.width, -bt.depth), (-bt.depth, -bt.width),
-                       (-bt.width, 0), (0, -bt.depth),
-                       (-bt.depth, 0), (0, -bt.width)]:
-            for (ax, ay) in anchors:
-                extended.add((ax + dx, ay + dy))
-
-    # Sort bays by efficiency descending, try rotations 0,180,90,270
-    sorted_types = sorted(bay_types, key=lambda b: b.n_loads * b.area / b.price,
-                          reverse=True)
-    rotations = [0, 180, 90, 270]
-
-    current_score = compute_score(engine.placed_bays, usable_area_val)
-    improved = True
-
-    while improved and time.time() - start_time < time_budget:
-        improved = False
-        # Sorting anchors makes the pass deterministic
-        for (ax, ay) in sorted(extended):
-            if time.time() - start_time >= time_budget:
-                break
-            for bt in sorted_types:
-                for rot in rotations:
-                    c = PlacedBay(bay_type=bt, x=int(ax), y=int(ay), rotation=rot)
-                    if not engine.can_place(c):
-                        continue
-                    # Tentative placement: does it reduce Q?
-                    trial = engine.placed_bays + [c]
-                    new_score = compute_score(trial, usable_area_val)
-                    if new_score < current_score:
-                        engine.place(c)
-                        current_score = new_score
-                        improved = True
-                        break
-                if improved:
-                    break
+#
+# Previously this module implemented fill_gaps_deterministic, an anchor-based
+# post-processing step that tried to squeeze additional bays into leftover
+# space after the strip-pack matrix. It was removed because
+# traces/filler_vs_sa.csv showed:
+#   * It cost ~75s total across all 17 cases.
+#   * It gained +1664 Q total (Case0 +1632, Case13 +32, rest 0).
+#   * LNS+SA applied on the filler-less greedy output recovers those Q pts
+#     and then some (-4211 Q total vs the filler baseline, -4067 on
+#     Case15_mega alone). Running LNS after the filler vs after no-filler
+#     differs by -20 Q total — statistically indistinguishable.
+# Conclusion: the filler was redundant with LNS+SA downstream. Removing it
+# keeps greedy purely constructive (matrix of strip-pack passes).
 
 
 # ─────────────────────────────────────────────
+
+
 # Top-level solver
 # ─────────────────────────────────────────────
 
@@ -622,18 +567,14 @@ def solve_one_case(
         if final_engine.can_place(pb):
             final_engine.place(pb)
 
-    # Gap-filler — spend remaining time up to ~20% of total
-    elapsed = time.time() - total_start
-    fill_budget = max(0.2, time_limit - elapsed - 0.3)
-    if fill_budget > 0.2:
-        fill_gaps_deterministic(
-            final_engine, bay_types, warehouse, usable_area_val, fill_budget,
-        )
+    # Gap-filler removed: benchmark_filler_vs_sa.py showed LNS+SA downstream
+    # already recovers the +1664 Q pts the filler contributed, and the filler
+    # cost ~75s across all cases. See traces/filler_vs_sa.csv.
 
     final_score = compute_score(final_engine.placed_bays, usable_area_val)
     if verbose:
-        print(f"    [greedy] best pre-fill: {best_label} Q={best_score:.2f}")
-        print(f"    [greedy] after filler:  Q={final_score:.2f} "
+        print(f"    [greedy] best: {best_label} Q={best_score:.2f}")
+        print(f"    [greedy] final: Q={final_score:.2f} "
               f"({len(final_engine.placed_bays)} bays)")
 
     return final_engine.placed_bays, results
@@ -942,8 +883,9 @@ def _pack_region_oriented(
         for d in (bt.depth, bt.width):
             gap_for_depth[d] = min(gap_for_depth.get(d, bt.gap), bt.gap)
 
-    # Reduced criteria set for per-region search (region-level search is
-    # cheaper and we don't need all 6 variants)
+    # Reduced criteria set for per-region search. After pruning CRITERIA
+    # down to 2, slicing keeps both; left as a slice so re-enabling more
+    # criteria doesn't blow up region search time.
     region_criteria = CRITERIA[:3]
 
     best_eng: Optional[FastCollisionEngine] = None
@@ -1070,19 +1012,13 @@ def solve_one_case_regional(
             best_q = q
             best_placements = placed
 
-    # Post-fill with the deterministic anchor-based gap-filler
+    # Gap-filler removed (see solve_one_case). Just rebuild a clean engine
+    # with the winning placements and return.
     if best_placements:
         final_engine = FastCollisionEngine(warehouse, obstacles, ceiling)
         for pb in best_placements:
             if final_engine.can_place(pb):
                 final_engine.place(pb)
-
-        elapsed = time.time() - total_start
-        fill_budget = max(0.2, time_limit - elapsed - 0.3)
-        if fill_budget > 0.2:
-            fill_gaps_deterministic(
-                final_engine, bay_types, warehouse, usable_area_val, fill_budget,
-            )
         return final_engine.placed_bays, rectangles
 
     return best_placements, rectangles
