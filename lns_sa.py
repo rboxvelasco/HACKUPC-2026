@@ -99,6 +99,10 @@ class BayKernel:
                        within its bounding box so that (anchor_row_off,
                        anchor_col_off) is the cell that coincides with the
                        body's bottom-left.
+        gap_only_mask: (bg_rows, bg_cols) bool, the gap-only portion of the
+                       body+gap bounding box (True wherever bodygap_mask is
+                       True AND body_mask is False). Precomputed to avoid
+                       recreating it on every greedy_repair candidate.
         anchor_row_off: Row offset of the body's bottom-left inside
                         bodygap_mask. 0 except for rotation 180 (g cells up).
         anchor_col_off: Column offset of the body's bottom-left inside
@@ -111,6 +115,7 @@ class BayKernel:
     rotation: int
     body_mask: np.ndarray
     bodygap_mask: np.ndarray
+    gap_only_mask: np.ndarray
     anchor_row_off: int
     anchor_col_off: int
     gap_mm: int
@@ -177,11 +182,20 @@ def build_kernels(
 
             bodygap_mask = np.ones((bg_rows, bg_cols), dtype=bool)
 
+            # Gap-only region: bodygap minus the body footprint. Precomputed
+            # once so greedy_repair does not need to copy bodygap_mask and
+            # zero out the body slot on every candidate (formerly millions
+            # of `k.bodygap_mask.copy()` per LNS run — see profiling).
+            gap_only_mask = bodygap_mask.copy()
+            gap_only_mask[anchor_row:anchor_row + body_rows,
+                          anchor_col:anchor_col + body_cols] = False
+
             per_rotation[rot] = BayKernel(
                 bay_type_id=bt.id,
                 rotation=rot,
                 body_mask=body_mask,
                 bodygap_mask=bodygap_mask,
+                gap_only_mask=gap_only_mask,
                 anchor_row_off=anchor_row,
                 anchor_col_off=anchor_col,
                 gap_mm=bt.gap,
@@ -228,15 +242,11 @@ class LNSState:
         bh, bw = k.body_mask.shape
         self.occupied[r0:r0 + bh, c0:c0 + bw] |= k.body_mask
 
-        # Gap region: bodygap_mask minus the body portion
+        # Gap region: bodygap minus body, precomputed as k.gap_only_mask.
         bg_r0 = r0 - k.anchor_row_off
         bg_c0 = c0 - k.anchor_col_off
         bgh, bgw = k.bodygap_mask.shape
-        gap_patch = k.bodygap_mask.copy()
-        # Zero out the body area in the patch
-        gap_patch[k.anchor_row_off:k.anchor_row_off + bh,
-                  k.anchor_col_off:k.anchor_col_off + bw] = False
-        self.gap[bg_r0:bg_r0 + bgh, bg_c0:bg_c0 + bgw] |= gap_patch
+        self.gap[bg_r0:bg_r0 + bgh, bg_c0:bg_c0 + bgw] |= k.gap_only_mask
         # gap must not overlap occupied (defensive; body + gap are disjoint by construction)
         self.gap &= ~self.occupied
 
@@ -253,10 +263,7 @@ class LNSState:
         bg_r0 = r0 - k.anchor_row_off
         bg_c0 = c0 - k.anchor_col_off
         bgh, bgw = k.bodygap_mask.shape
-        gap_patch = k.bodygap_mask.copy()
-        gap_patch[k.anchor_row_off:k.anchor_row_off + bh,
-                  k.anchor_col_off:k.anchor_col_off + bw] = False
-        self.gap[bg_r0:bg_r0 + bgh, bg_c0:bg_c0 + bgw] &= ~gap_patch
+        self.gap[bg_r0:bg_r0 + bgh, bg_c0:bg_c0 + bgw] &= ~k.gap_only_mask
 
         self.placed.pop(idx)
 
@@ -698,14 +705,12 @@ def greedy_repair(
         bg_r0 = br - k.anchor_row_off
         bg_c0 = bc - k.anchor_col_off
         bgh, bgw = k.bodygap_mask.shape
-        # BG cells that are gap-only (bodygap - body)
-        gap_patch = k.bodygap_mask.copy()
-        gap_patch[k.anchor_row_off:k.anchor_row_off + bh,
-                  k.anchor_col_off:k.anchor_col_off + bw] = False
-        # Body must not hit existing gap, and BG must not hit existing occupied
+        # Body must not hit existing gap, and BG must not hit existing
+        # occupied. gap_only_mask was precomputed in build_kernels (bodygap
+        # minus body), so no per-candidate copy + zero-out.
         if state.gap[br:br + bh, bc:bc + bw].any():
             continue
-        if (state.occupied[bg_r0:bg_r0 + bgh, bg_c0:bg_c0 + bgw] & gap_patch).any():
+        if (state.occupied[bg_r0:bg_r0 + bgh, bg_c0:bg_c0 + bgw] & k.gap_only_mask).any():
             continue
 
         # All clear — place it.
