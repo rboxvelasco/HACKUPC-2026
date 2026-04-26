@@ -143,6 +143,32 @@ body {
     background: var(--accent-2); color: white;
 }
 
+/* Animate-transition button */
+.anim-btn {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    width: 100%; margin-top: 10px; padding: 10px 14px;
+    background: linear-gradient(135deg, var(--accent-2) 0%, #8a5cf6 100%);
+    border: none; border-radius: 8px; cursor: pointer;
+    font-size: 13px; font-weight: 600; color: white;
+    letter-spacing: 0.02em;
+    box-shadow: 0 4px 14px rgba(108, 156, 255, 0.25);
+    transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+}
+.anim-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(108, 156, 255, 0.4);
+}
+.anim-btn:active { transform: translateY(0); }
+.anim-btn:disabled {
+    opacity: 0.5; cursor: wait; transform: none;
+    box-shadow: 0 2px 6px rgba(108, 156, 255, 0.1);
+}
+.anim-btn-icon {
+    display: inline-block; font-size: 11px; line-height: 1;
+    transition: transform 0.3s;
+}
+.anim-btn.playing .anim-btn-icon { transform: rotate(90deg) scale(1.2); }
+
 /* Bay list */
 .bay-list-header {
     padding: 14px 20px 6px;
@@ -480,6 +506,10 @@ body {
             <button class="switch-btn active" data-sol="0">Greedy</button>
             <button class="switch-btn" data-sol="1">SA</button>
         </div>
+        <button class="anim-btn" id="animateBtn" title="Animate transition from Greedy to SA">
+            <span class="anim-btn-icon">▶</span>
+            <span class="anim-btn-label">Animate Greedy → SA</span>
+        </button>
     </div>
 
 
@@ -925,6 +955,365 @@ if (COMPARE) {
     });
 }
 
+/* ─────────────────────────────────────────────
+ * Compare → Animate transition (2D canvas)
+ * ─────────────────────────────────────────────
+ *
+ * Wires the ▶ Animate button in compare mode. Plays a 3-second morph
+ * that takes the viewer visually from the FROM solution (default: 0,
+ * "Greedy") to the TO solution (default: 1, "SA"), with three
+ * choreographed phases:
+ *
+ *   Phase 1 (0.00 - 0.30s): FROM bays dim + a sand-fall particle field
+ *                           starts emitting from the warehouse floor.
+ *   Phase 2 (0.10 - 1.80s): Particles rise and spread, forming a
+ *                           bitmap-like lattice that hints at the LNS
+ *                           internal representation (occupied | gap).
+ *   Phase 3 (0.60 - 3.00s): Each FROM bay morphs (linear-in-out) to the
+ *                           matched TO bay of the same type. Unmatched
+ *                           FROM bays fade out; unmatched TO bays rise
+ *                           from below with the particles.
+ *
+ * All rendering done on canvas2d with ctx/ts/sc imported from scope.
+ * During playback the switch buttons are disabled so we don't clash
+ * with user interaction. On completion we call switchSolution(toIdx)
+ * so the post-animation state is consistent.
+ */
+let ANIM_RUNNING = false;
+
+/** Greedy min-distance matching between two bay lists grouped by tid.
+ *  For each type, pair bays by repeatedly taking the closest (a,b) pair,
+ *  removing them, and continuing. Unmatched bays go to the `extra` side.
+ *  Returns { pairs: [{from, to}], onlyFrom: [bay...], onlyTo: [bay...] }.
+ */
+function pairBays(fromBays, toBays) {
+    const byTidFrom = new Map(), byTidTo = new Map();
+    for (const b of fromBays) {
+        if (!byTidFrom.has(b.tid)) byTidFrom.set(b.tid, []);
+        byTidFrom.get(b.tid).push(b);
+    }
+    for (const b of toBays) {
+        if (!byTidTo.has(b.tid)) byTidTo.set(b.tid, []);
+        byTidTo.get(b.tid).push(b);
+    }
+    const pairs = [], onlyFrom = [], onlyTo = [];
+    const allTids = new Set([...byTidFrom.keys(), ...byTidTo.keys()]);
+    for (const tid of allTids) {
+        const A = (byTidFrom.get(tid) || []).slice();
+        const B = (byTidTo.get(tid) || []).slice();
+        // Precompute all pairwise squared distances (centroids)
+        const pairsScored = [];
+        for (let i = 0; i < A.length; i++) {
+            for (let j = 0; j < B.length; j++) {
+                const ax = A[i].x + A[i].w / 2, ay = A[i].y + A[i].d / 2;
+                const bx = B[j].x + B[j].w / 2, by = B[j].y + B[j].d / 2;
+                const d = (ax - bx) * (ax - bx) + (ay - by) * (ay - by);
+                pairsScored.push({ i, j, d });
+            }
+        }
+        pairsScored.sort((p, q) => p.d - q.d);
+        const usedA = new Set(), usedB = new Set();
+        for (const p of pairsScored) {
+            if (usedA.has(p.i) || usedB.has(p.j)) continue;
+            usedA.add(p.i); usedB.add(p.j);
+            pairs.push({ from: A[p.i], to: B[p.j] });
+        }
+        A.forEach((b, i) => { if (!usedA.has(i)) onlyFrom.push(b); });
+        B.forEach((b, j) => { if (!usedB.has(j)) onlyTo.push(b); });
+    }
+    return { pairs, onlyFrom, onlyTo };
+}
+
+/** Ease functions */
+function easeInOut(t) { return t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t + 2, 2) / 2; }
+function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+
+/** Point-in-polygon test (ray casting). poly is [[x,y], ...] closed or not. */
+function pointInPoly(px, py, poly) {
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        const xi = poly[i][0], yi = poly[i][1];
+        const xj = poly[j][0], yj = poly[j][1];
+        const intersect = ((yi > py) !== (yj > py)) &&
+            (px < (xj - xi) * (py - yi) / ((yj - yi) || 1e-9) + xi);
+        if (intersect) inside = !inside;
+    }
+    return inside;
+}
+
+/** Interpolate a "virtual bay" between a FROM and a TO placement.
+ *
+ *  Body dims in the payload are `w × d` (width × depth) already rotated
+ *  per the bay's `rot` field — i.e. for rot∈{0,180} w = bay_type.width
+ *  and d = bay_type.depth, for rot∈{90,270} they're swapped. The
+ *  rectangle drawn on the canvas is axis-aligned.
+ *
+ *  To keep intermediate frames inside legal tile dimensions we interpolate
+ *  on (long_side, short_side) rather than (w, d) directly. If FROM has
+ *  (w=6, d=2) and TO has (w=2, d=6), both have the same (long=6, short=2)
+ *  and the interpolation is a rigid "orientation flip" plus a small
+ *  position drift — no intermediate frame has impossible proportions.
+ *
+ *  Position is interpolated by centroid so the bay never clips the
+ *  perimeter just because its bbox stretched asymmetrically.
+ */
+function lerpBay(from, to, k) {
+    // Centroid-based position lerp
+    const fcx = from.x + from.w / 2, fcy = from.y + from.d / 2;
+    const tcx = to.x + to.w / 2,     tcy = to.y + to.d / 2;
+    const cx = fcx + (tcx - fcx) * k;
+    const cy = fcy + (tcy - fcy) * k;
+
+    // Interpolate on long/short axes (rotation-invariant dims)
+    const fLong  = Math.max(from.w, from.d);
+    const fShort = Math.min(from.w, from.d);
+    const tLong  = Math.max(to.w,   to.d);
+    const tShort = Math.min(to.w,   to.d);
+    const longSide  = fLong  + (tLong  - fLong ) * k;
+    const shortSide = fShort + (tShort - fShort) * k;
+
+    // Current axis-aligned orientation. We pick whichever matches the
+    // bay "closer" in time: up to k=0.5 we keep FROM's orientation,
+    // past 0.5 we use TO's. The swap moment coincides with peak morph,
+    // where the shape is most square-like and the jump is least visible.
+    const srcHorizontal = from.w >= from.d;
+    const dstHorizontal = to.w   >= to.d;
+    const horizontal = (k < 0.5) ? srcHorizontal : dstHorizontal;
+    const w = horizontal ? longSide : shortSide;
+    const d = horizontal ? shortSide : longSide;
+
+    // Rotation is kept as a scalar for legacy reasons (not used in draw)
+    let df = ((to.rot - from.rot) % 360 + 360) % 360;
+    if (df > 180) df -= 360;
+    const rot = from.rot + df * k;
+
+    return {
+        tid: from.tid,
+        // Bottom-left for compatibility with draw2d.
+        x: cx - w / 2,
+        y: cy - d / 2,
+        w, d, rot,
+    };
+}
+
+/** Draw a single "virtual bay" with a given opacity and optional scale.
+ *
+ *  Matches draw2d's style (gradient, rounded corners, edge stroke). The
+ *  body rectangle is axis-aligned in screen space — the rotation is
+ *  already encoded into b.w/b.d, so we do NOT ctx.rotate().
+ *
+ *  `scale`: optional, applied around the body centroid for pop-in /
+ *  scale-in effects. Default 1.
+ */
+function drawVBay(b, alpha, scale) {
+    if (b.w <= 0 || b.d <= 0) return;
+    const s = (scale === undefined) ? 1 : scale;
+    const effW = b.w * s;
+    const effD = b.d * s;
+    const cx = b.x + b.w / 2;
+    const cy = b.y + b.d / 2;
+    // Top-left in world corresponds to (cx - effW/2, cy + effD/2)
+    const [sx, sy] = ts(cx - effW / 2, cy + effD / 2);
+    const w = effW * sc, h = effD * sc;
+    if (w < 0.5 || h < 0.5) return;
+    const col = colorFor(b.tid);
+    const rgb = hexToRgb(col);
+    const r = Math.min(2, w / 4, h / 4);
+    const g = ctx.createLinearGradient(sx, sy, sx, sy + h);
+    g.addColorStop(0, `rgba(${rgb.r},${rgb.g},${rgb.b},${0.72 * alpha})`);
+    g.addColorStop(1, `rgba(${Math.floor(rgb.r*0.7)},${Math.floor(rgb.g*0.7)},${Math.floor(rgb.b*0.7)},${0.72 * alpha})`);
+    roundRect(sx, sy, w, h, r);
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.strokeStyle = `rgba(255,255,255,${0.12 * alpha})`;
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+}
+
+/** Particle field: a pool of particles emitted from random spots on the
+ *  warehouse floor, rising to form a bitmap-like cloud. Particles are
+ *  filtered to lie strictly inside the warehouse polygon so non-convex
+ *  shapes (L, U, T, donut) don't get floating specks in the voids.
+ */
+function buildParticles(n) {
+    const parts = [];
+    const maxTries = n * 4;
+    let tries = 0;
+    while (parts.length < n && tries < maxTries) {
+        tries++;
+        const x0 = B.x0 + Math.random() * (B.x1 - B.x0);
+        const y0 = B.y0 + Math.random() * (B.y1 - B.y0);
+        if (!pointInPoly(x0, y0, WH)) continue;
+        // Reject particles over obstacles too — they'd visually collide
+        let inObs = false;
+        for (const o of OBS) {
+            if (x0 >= o.x && x0 <= o.x + o.w && y0 >= o.y && y0 <= o.y + o.h) {
+                inObs = true; break;
+            }
+        }
+        if (inObs) continue;
+        parts.push({
+            x: x0,
+            y: y0,
+            t0: 0.05 + Math.random() * 0.55,
+            t1: 0.55 + Math.random() * 0.35,
+            hue: Math.random() < 0.5 ? 210 : 270,
+            size: 0.8 + Math.random() * 1.6,
+            // Amplitude as a fraction of the short axis so it looks
+            // proportionate in any warehouse aspect ratio.
+            amp: Math.min(B.x1 - B.x0, B.y1 - B.y0) * (0.015 + Math.random() * 0.04),
+        });
+    }
+    return parts;
+}
+
+/** Main animation driver. fromIdx/toIdx are indices into SOLUTIONS. */
+function animateTransition(fromIdx, toIdx) {
+    if (ANIM_RUNNING) return;
+    if (viewMode !== '2d') {
+        // Force 2D for the animation; switching modes mid-flight breaks
+        // the rAF loop. Users can flip back to 3D afterwards.
+        const btn2d = document.querySelector('#modeToggle .vmode-btn[data-mode="2d"]');
+        if (btn2d) btn2d.click();
+    }
+    ANIM_RUNNING = true;
+    const animBtn = document.getElementById('animateBtn');
+    if (animBtn) { animBtn.classList.add('playing'); animBtn.disabled = true; }
+    document.querySelectorAll('.switch-btn').forEach(b => b.disabled = true);
+
+    const fromBays = SOLUTIONS[fromIdx].bays;
+    const toBays = SOLUTIONS[toIdx].bays;
+    const { pairs, onlyFrom, onlyTo } = pairBays(fromBays, toBays);
+
+    // Particle count: scale with warehouse size so coverage looks uniform
+    const whArea = (B.x1 - B.x0) * (B.y1 - B.y0);
+    const nParts = Math.min(1200, Math.max(200, Math.floor(Math.sqrt(whArea) / 15)));
+    const parts = buildParticles(nParts);
+
+    const DURATION_MS = 3000;
+    const start = performance.now();
+    const cw = canvas2d.width / devicePixelRatio;
+    const ch = canvas2d.height / devicePixelRatio;
+
+    function frame(now) {
+        const t = Math.min(1, (now - start) / DURATION_MS);
+
+        // ── Repaint background + static scene (warehouse + obstacles) ──
+        ctx.clearRect(0, 0, cw, ch);
+        // Floor gradient
+        const grad = ctx.createLinearGradient(0, 0, 0, ch);
+        grad.addColorStop(0, '#1c212d');
+        grad.addColorStop(1, '#151821');
+        ctx.beginPath();
+        for (let i = 0; i < WH.length; i++) {
+            const [sx, sy] = ts(WH[i][0], WH[i][1]);
+            i === 0 ? ctx.moveTo(sx, sy) : ctx.lineTo(sx, sy);
+        }
+        ctx.closePath();
+        ctx.fillStyle = grad;
+        ctx.fill();
+        ctx.strokeStyle = '#3a4050';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // Obstacles (subtle, no hatching during animation for clarity)
+        for (const o of OBS) {
+            const [sx, sy] = ts(o.x, o.y + o.h);
+            roundRect(sx, sy, o.w * sc, o.h * sc, 3);
+            ctx.fillStyle = 'rgba(255, 93, 102, 0.15)';
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(255, 93, 102, 0.4)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        }
+
+        // ── Phase A: FROM bays fade out (0 → 0.35) ──────────────────
+        const fadeFrom = 1 - easeInOut(Math.min(1, t / 0.35));
+        // ── Phase C: matched pairs morph (0.30 → 1.00) ──────────────
+        const morphRaw = (t - 0.30) / 0.70;
+        const morphK = morphRaw <= 0 ? 0 : morphRaw >= 1 ? 1 : easeInOut(morphRaw);
+        // ── Phase B: particles (0.10 → 0.90) ────────────────────────
+
+        // Matched pairs: linear interpolate from FROM→TO using morphK.
+        // Their opacity fully ramps to 1 by t=0.95.
+        const pairAlpha = Math.min(1, Math.max(0, (t - 0.10) / 0.85));
+        for (const p of pairs) {
+            const vb = lerpBay(p.from, p.to, morphK);
+            drawVBay(vb, pairAlpha);
+        }
+
+        // Unmatched FROM bays: fade out during phase A, drawn in their
+        // real pose (original rot). No scale, no displacement, so they
+        // stay strictly inside the perimeter until they disappear.
+        if (fadeFrom > 0.01) {
+            for (const b of onlyFrom) drawVBay(b, fadeFrom * 0.9);
+        }
+
+        // Unmatched TO bays: pop-in animation — born at their final
+        // position but with a smaller scale, growing to 1.0 as the
+        // morph progresses. This keeps them strictly inside the
+        // warehouse polygon at every frame (no vertical offset).
+        const toFade = easeInOut(Math.min(1, Math.max(0, (t - 0.45) / 0.55)));
+        if (toFade > 0.01) {
+            const scaleIn = 0.4 + 0.6 * toFade;  // 0.4 → 1.0
+            for (const b of onlyTo) drawVBay(b, toFade, scaleIn);
+        }
+
+        // ── Particles on top ────────────────────────────────────────
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        for (const p of parts) {
+            if (t < p.t0 || t > p.t1 + 0.25) continue;
+            // Local lifetime 0..1 in [p.t0, p.t1+0.25]
+            const local = (t - p.t0) / (p.t1 + 0.25 - p.t0);
+            const rise = easeOutCubic(Math.min(1, local * 1.2));
+            const alpha = local < 0.75
+                ? easeInOut(local / 0.75)
+                : easeInOut(1 - (local - 0.75) / 0.25);
+            const y = p.y + rise * p.amp;
+            const [sx, sy] = ts(p.x, y);
+            const r = p.size;
+            const h = p.hue;
+            ctx.fillStyle = `hsla(${h}, 80%, 65%, ${alpha * 0.55})`;
+            ctx.beginPath();
+            ctx.arc(sx, sy, r, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.restore();
+
+        if (t < 1) {
+            requestAnimationFrame(frame);
+        } else {
+            // End of animation: restore consistent state on the target
+            ANIM_RUNNING = false;
+            if (animBtn) { animBtn.classList.remove('playing'); animBtn.disabled = false; }
+            document.querySelectorAll('.switch-btn').forEach(b => b.disabled = false);
+            // Flip the active solution UI
+            document.querySelectorAll('.switch-btn').forEach((b, i) =>
+                b.classList.toggle('active', i === toIdx));
+            switchSolution(toIdx);
+        }
+    }
+
+    requestAnimationFrame(frame);
+}
+
+if (COMPARE) {
+    const animBtn = document.getElementById('animateBtn');
+    if (animBtn) {
+        animBtn.addEventListener('click', () => {
+            if (ANIM_RUNNING) return;
+            // Always animate from A (index 0) to B (index 1).
+            // If user is currently on B, restart from A first.
+            if (activeIdx !== 0) switchSolution(0);
+            // Flip UI highlight to indicate transition is starting
+            document.querySelectorAll('.switch-btn').forEach((b, i) =>
+                b.classList.toggle('active', i === 0));
+            animateTransition(0, 1);
+        });
+    }
+}
+
 /* ── 2D canvas interaction ─────────────── */
 canvas2d.addEventListener('wheel', (e) => {
     e.preventDefault();
@@ -1079,6 +1468,25 @@ class ThreeView {
         const dir2 = new THREE.DirectionalLight(0x8ab8ff, 0.28);
         dir2.position.set(-this.wx * 0.3, -this.wy * 0.4, 10000);
         this.scene.add(dir2);
+
+        // Camera-follow light: an off-axis headlamp that tracks the
+        // observer so shadows sweep across the scene as the camera
+        // orbits. Intensity is modest — we still want the fixed `dir`
+        // to define the primary sun direction.
+        const camLight = new THREE.DirectionalLight(0xfff4e0, 0.55);
+        camLight.castShadow = true;
+        camLight.shadow.mapSize.set(1024, 1024);
+        const cs = Math.max(this.wx, this.wy);
+        camLight.shadow.camera.left = -cs;
+        camLight.shadow.camera.right = cs;
+        camLight.shadow.camera.top = cs;
+        camLight.shadow.camera.bottom = -cs;
+        camLight.shadow.camera.near = 100;
+        camLight.shadow.camera.far = 180000;
+        camLight.shadow.bias = -0.0005;
+        this.scene.add(camLight);
+        this.scene.add(camLight.target);
+        this._camLight = camLight;
 
         // Raycaster
         this.raycaster = new THREE.Raycaster();
@@ -1301,28 +1709,51 @@ class ThreeView {
             edge.position.copy(mesh.position);
             this.bayGroup.add(edge);
 
-            // Gap as translucent floor slab
-            const gapGeo = new THREE.BoxGeometry(b.gw, 20, b.gh);
+            // Gap as a translucent 3D slab — full bay-body height so the
+            // pedestrian aisle is visibly "reserved" at the same scale
+            // as the stand it serves. Kept transparent + depthWrite off
+            // so the bay behind it remains readable.
+            const gapH = Math.max(200, b.h);
+            const gapGeo = new THREE.BoxGeometry(b.gw, gapH, b.gh);
             const gapMat = new THREE.MeshStandardMaterial({
                 color: 0x6c9cff,
                 transparent: true,
-                opacity: 0.22,
-                roughness: 1.0,
+                opacity: 0.14,
+                roughness: 0.6,
+                metalness: 0.1,
+                emissive: 0x3a5d9f,
+                emissiveIntensity: 0.12,
+                depthWrite: false,  // avoid sorting artefacts with bays
             });
             const gm = new THREE.Mesh(gapGeo, gapMat);
             const [gsx, , gsz] = this.w2s(b.gx + b.gw / 2, b.gy + b.gh / 2, 0);
-            gm.position.set(gsx, 10, gsz);
+            gm.position.set(gsx, gapH / 2, gsz);
+            gm.receiveShadow = true;  // take shadows from bays for depth cue
             this.gapGroup.add(gm);
 
-            // Dashed outline on the floor to show gap extents
+            // Bottom edge highlight: a brighter strip on the floor
+            // perimeter so the aisle footprint reads clearly from above.
+            const edgeGeo = new THREE.BoxGeometry(b.gw, 30, b.gh);
+            const edgeMat = new THREE.MeshBasicMaterial({
+                color: 0x6c9cff,
+                transparent: true,
+                opacity: 0.35,
+                depthWrite: false,
+            });
+            const eg = new THREE.Mesh(edgeGeo, edgeMat);
+            eg.position.set(gsx, 15, gsz);
+            this.gapGroup.add(eg);
+
+            // Dashed outline of the top face — picks up the camera light
+            // so the aisle boundary is visually defined when orbiting.
             const gapEdge = new THREE.LineSegments(
                 new THREE.EdgesGeometry(new THREE.BoxGeometry(b.gw, 0.1, b.gh)),
                 new THREE.LineDashedMaterial({
-                    color: 0x6c9cff, dashSize: 120, gapSize: 80,
-                    transparent: true, opacity: 0.55,
+                    color: 0x8ab8ff, dashSize: 120, gapSize: 80,
+                    transparent: true, opacity: 0.7,
                 })
             );
-            gapEdge.position.set(gsx, 12, gsz);
+            gapEdge.position.set(gsx, gapH + 2, gsz);
             gapEdge.computeLineDistances();
             this.gapGroup.add(gapEdge);
         }
@@ -1430,6 +1861,23 @@ class ThreeView {
     _animate() {
         if (!this._running) return;
         this.controls.update();
+        // Camera-follow light: sync to camera position each frame so
+        // shadows move with the observer. The light is placed slightly
+        // above-and-behind the camera so grazing light hits objects
+        // (more dramatic than a dead-on headlamp, which flattens them).
+        if (this._camLight) {
+            const cam = this.camera;
+            const offsetUp = 2500;        // raise above the camera
+            const offsetBack = 0;         // at the camera's point
+            this._camLight.position.set(
+                cam.position.x,
+                cam.position.y + offsetUp,
+                cam.position.z
+            );
+            // Target: middle of the controls' target (== what we're looking at)
+            const t = this.controls.target;
+            this._camLight.target.position.set(t.x, t.y, t.z);
+        }
         this.renderer.render(this.scene, this.camera);
         requestAnimationFrame(() => this._animate());
     }
