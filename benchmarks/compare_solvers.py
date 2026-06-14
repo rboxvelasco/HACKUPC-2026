@@ -12,8 +12,8 @@ from typing import Optional, Tuple
 
 
 SOLVERS = [
-    ('complex', 'solver.py'),
-    ('greedy ', 'greedy_solver.py'),
+    ('complex', 'src.core.solver'),
+    ('greedy', 'src.core.greedy_solver'),
 ]
 
 
@@ -21,7 +21,7 @@ def run_solver(script: str, case_dir: str, out_file: str) -> Tuple[Optional[floa
     """Run a solver script, return (Q, coverage, n_bays, elapsed)."""
     start = time.time()
     result = subprocess.run(
-        ['python3', script, case_dir, out_file],
+        ['python3', '-m', script, case_dir, out_file],
         capture_output=True, text=True,
     )
     elapsed = time.time() - start
