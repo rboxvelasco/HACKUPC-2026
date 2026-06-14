@@ -36,11 +36,11 @@ import webbrowser
 from dataclasses import dataclass
 from typing import List, Optional
 
-from solver import (
+from .solver import (
     compute_score, parse_bay_types, parse_obstacles, parse_warehouse,
     usable_area,
 )
-from lns_sa import _load_solution  # small helper to read a solution CSV
+from .lns_sa import _load_solution  # small helper to read a solution CSV
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -86,7 +86,11 @@ class CaseResult:
 def _run(cmd: List[str]) -> Stage:
     t0 = time.time()
     try:
-        result = subprocess.run(cmd, check=False)
+        result = subprocess.run(
+            cmd,
+            check=False,
+            cwd=os.getcwd()
+        )
         elapsed = time.time() - t0
         if result.returncode == 0:
             return Stage(ok=True, elapsed=elapsed)
@@ -128,7 +132,7 @@ def run_case(case_dir: str, out_dir: str, lns_time: float,
         greedy_stage = Stage(ok=True, elapsed=0.0, message='reused existing CSV')
     else:
         greedy_stage = _run(
-            [sys.executable, 'greedy_solver.py', case_dir, greedy_csv]
+            [sys.executable, '-m', 'src.core.greedy_solver', case_dir, greedy_csv]
         )
     greedy_q = _score_csv(case_dir, greedy_csv) if greedy_stage.ok else None
 
@@ -143,7 +147,7 @@ def run_case(case_dir: str, out_dir: str, lns_time: float,
     # Stage 3: compare HTML (needs both CSVs)
     if lns_stage.ok and os.path.exists(greedy_csv) and os.path.exists(lns_csv):
         visual_stage = _run([
-            sys.executable, 'visualize.py', case_dir, greedy_csv,
+            sys.executable, '-m', 'src.core.visualize', case_dir, greedy_csv,
             '--compare', lns_csv,
             '--labels', 'Greedy,SA',
             '-o', compare_html,
@@ -173,11 +177,14 @@ def _run_lns_inproc(case_dir: str, in_csv: str, out_csv: str,
     """
     t0 = time.time()
     try:
-        import lns_sa
+        from . import lns_sa   # 🔥 CAMBIO MÍNIMO AQUÍ
+
         cfg = lns_sa.LNSConfig(time_limit=time_limit, verbose=False)
         result = lns_sa.run_lns_sa(case_dir, in_csv, cfg)
         lns_sa._write_solution(result.best_placed, out_csv)
+
         return Stage(ok=True, elapsed=time.time() - t0)
+
     except Exception as e:
         return Stage(ok=False, elapsed=time.time() - t0,
                      message=f'{type(e).__name__}: {e}')

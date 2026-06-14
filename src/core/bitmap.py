@@ -47,7 +47,7 @@ from typing import List, Tuple
 
 import numpy as np
 
-from solver import (
+from .solver import (
     Ceiling,
     PlacedBay,
     parse_bay_types,

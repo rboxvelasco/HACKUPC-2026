@@ -36,7 +36,7 @@ from shapely.prepared import prep
 from shapely import STRtree
 
 # Reuse parsing and data structures from the existing solver to avoid drift.
-from solver import (
+from .solver import (
     BayType, Ceiling, PlacedBay,
     parse_warehouse, parse_obstacles, parse_ceiling, parse_bay_types,
     compute_score, usable_area, compute_free_space,

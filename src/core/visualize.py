@@ -30,7 +30,7 @@ import os
 import sys
 from typing import List, Tuple
 
-from solver import (
+from .solver import (
     Ceiling,
     PlacedBay,
     compute_score,
