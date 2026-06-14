@@ -17,7 +17,7 @@ visualizations.
 import sys
 import numpy as np
 
-from bitmap import rasterize_solution
+from src.core.bitmap import rasterize_solution
 
 
 def render_png(case_dir: str, solution_csv: str, out_path: str) -> None:
