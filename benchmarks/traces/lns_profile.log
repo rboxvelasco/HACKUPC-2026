@@ -1,0 +1,186 @@
+=== LNS+SA profiling ===
+LNS budget per case: 25.0s
+Cases:               17
+
+Pass 1 — instrumented phase timing
+  [Case0] running ...
+    elapsed=25.22s  iters=80  fft=5840  acc=21  imp=6
+  [Case1] running ...
+    elapsed=25.19s  iters=30  fft=5790  acc=0  imp=0
+  [Case10_donut] running ...
+    elapsed=25.75s  iters=34  fft=6562  acc=0  imp=0
+  [Case11] running ...
+    elapsed=27.72s  iters=7  fft=511  acc=0  imp=0
+  [Case12] running ...
+    elapsed=28.01s  iters=11  fft=803  acc=3  imp=0
+  [Case13] running ...
+    elapsed=26.56s  iters=18  fft=1314  acc=3  imp=0
+  [Case14] running ...
+    elapsed=27.07s  iters=7  fft=511  acc=3  imp=0
+  [Case15_mega] running ...
+    elapsed=59.17s  iters=1  fft=145  acc=1  imp=1
+  [Case2] running ...
+    elapsed=25.24s  iters=64  fft=12352  acc=0  imp=0
+  [Case3] running ...
+    elapsed=25.95s  iters=14  fft=2702  acc=0  imp=0
+  [Case4_T_shape] running ...
+    elapsed=25.42s  iters=38  fft=7334  acc=0  imp=0
+  [Case5_U_shape] running ...
+    elapsed=25.21s  iters=52  fft=10036  acc=0  imp=0
+  [Case6_obstacle_field] running ...
+    elapsed=25.23s  iters=43  fft=8299  acc=0  imp=0
+  [Case7_variable_ceiling] running ...
+    elapsed=26.47s  iters=14  fft=1022  acc=0  imp=0
+  [Case8_corridor] running ...
+    elapsed=25.13s  iters=82  fft=13858  acc=0  imp=0
+  [Case9_complex] running ...
+    elapsed=27.43s  iters=9  fft=873  acc=0  imp=0
+  [Case_Teixis] running ...
+    elapsed=26.24s  iters=4  fft=436  acc=0  imp=0
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+PHASE TIMING (seconds, instrumented)
+────────────────────────────────────────────────────────────────────────────────────────────────────
+case                        elapsed  destroy  cand_gen greedy_rep    score   iters    fft   acc   imp
+────────────────────────────────────────────────────────────────────────────────────────────────────
+Case0                       25.22s   0.05s  10.22s  14.54s   0.00s      80   5840    21     6
+Case1                       25.19s   0.01s   9.29s  15.43s   0.00s      30   5790     0     0
+Case10_donut                25.75s   0.02s   9.82s  15.43s   0.00s      34   6562     0     0
+Case11                      27.72s   0.01s   8.04s  18.44s   0.00s       7    511     0     0
+Case12                      28.01s   0.02s   8.83s  18.12s   0.00s      11    803     3     0
+Case13                      26.56s   0.02s   8.95s  16.70s   0.00s      18   1314     3     0
+Case14                      27.07s   0.01s   7.85s  18.07s   0.00s       7    511     3     0
+Case15_mega                 59.17s   0.01s  15.16s  40.59s   0.00s       1    145     1     1
+Case2                       25.24s   0.03s   9.53s  15.24s   0.00s      64  12352     0     0
+Case3                       25.95s   0.02s   9.69s  15.72s   0.00s      14   2702     0     0
+Case4_T_shape               25.42s   0.02s  10.01s  14.93s   0.00s      38   7334     0     0
+Case5_U_shape               25.21s   0.03s  10.16s  14.60s   0.00s      52  10036     0     0
+Case6_obstacle_field        25.23s   0.02s   9.82s  14.94s   0.00s      43   8299     0     0
+Case7_variable_ceiling      26.47s   0.01s   8.34s  17.25s   0.00s      14   1022     0     0
+Case8_corridor              25.13s   0.04s  10.45s  14.20s   0.00s      82  13858     0     0
+Case9_complex               27.43s   0.01s   8.43s  18.01s   0.00s       9    873     0     0
+Case_Teixis                 26.24s   0.01s   7.27s  17.83s   0.00s       4    436     0     0
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TOTAL                      477.00s   0.35s 161.85s 300.03s   0.01s     508  78388    31     7
+
+  destroy       :   0.1%
+  cand_gen (FFT):  33.9%
+  greedy_repair :  62.9%
+  Q scoring     :   0.0%
+  other/overhead:   3.1%
+
+  mean FFTs per iteration: 154.3
+  mean time per iteration: 939.0 ms
+  improvement rate       : 1.4% of iterations produced a new best
+
+Pass 2 — cProfile accumulation over all cases
+  wrote traces/lns_profile.pstats
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+cProfile — cumulative time in lns_sa.py functions (top 20)
+────────────────────────────────────────────────────────────────────────────────────────────────────
+Sun Apr 26 04:02:44 2026    traces/lns_profile.pstats
+
+         895563622 function calls in 451.758 seconds
+
+   Ordered by: cumulative time
+   List reduced from 207 to 22 due to restriction <'lns_sa'>
+   List reduced from 22 to 20 due to restriction <20>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+       17    8.635    0.508  475.804   27.988 lns_sa.py:767(run_lns_sa)
+      443   77.450    0.175  304.625    0.688 lns_sa.py:663(greedy_repair)
+      443  117.161    0.264  161.877    0.365 lns_sa.py:527(generate_candidates)
+145202946   18.273    0.000   21.970    0.000 lns_sa.py:684(<lambda>)
+    67896    0.271    0.000   17.200    0.000 lns_sa.py:494(_convolve_forbidden)
+      443    0.005    0.000    0.332    0.001 lns_sa.py:439(destroy_low_density)
+    22632    0.230    0.000    0.328    0.000 lns_sa.py:640(_ceiling_window_ok)
+       17    0.001    0.000    0.242    0.014 lns_sa.py:271(from_case)
+      443    0.029    0.000    0.231    0.001 lns_sa.py:352(_low_density_center)
+     9605    0.106    0.000    0.116    0.000 lns_sa.py:224(insert)
+    12867    0.053    0.000    0.060    0.000 lns_sa.py:245(remove)
+      443    0.016    0.000    0.027    0.000 lns_sa.py:384(_expand_rect_to_contain_bays)
+       17    0.000    0.000    0.019    0.001 lns_sa.py:311(_empty_solution_path)
+    49296    0.014    0.000    0.014    0.000 lns_sa.py:263(_body_origin_cell)
+       17    0.001    0.000    0.014    0.001 lns_sa.py:321(_load_solution)
+      460    0.000    0.000    0.012    0.000 lns_sa.py:730(q_score)
+      443    0.005    0.000    0.008    0.000 lns_sa.py:341(_max_bay_dim_cells)
+       17    0.001    0.000    0.003    0.000 lns_sa.py:122(build_kernels)
+      443    0.001    0.000    0.002    0.000 lns_sa.py:734(sa_accept)
+     1127    0.000    0.000    0.000    0.000 lns_sa.py:328(<listcomp>)
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+cProfile — internal (tottime) — top 25 overall (any module)
+────────────────────────────────────────────────────────────────────────────────────────────────────
+Sun Apr 26 04:02:44 2026    traces/lns_profile.pstats
+
+         895563622 function calls in 451.758 seconds
+
+   Ordered by: internal time
+   List reduced from 207 to 25 due to restriction <25>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+      443  117.161    0.264  161.877    0.365 lns_sa.py:527(generate_candidates)
+147898601  100.720    0.000  100.720    0.000 {method 'reduce' of 'numpy.ufunc' objects}
+      443   77.450    0.175  304.625    0.688 lns_sa.py:663(greedy_repair)
+     8457   76.517    0.009   98.488    0.012 {method 'sort' of 'list' objects}
+145202946   18.273    0.000   21.970    0.000 lns_sa.py:684(<lambda>)
+147898158   14.366    0.000  115.082    0.000 _methods.py:58(_any)
+147898158   13.195    0.000  128.278    0.000 {method 'any' of 'numpy.ndarray' objects}
+       17    8.635    0.508  475.804   27.988 lns_sa.py:767(run_lns_sa)
+   136678    6.518    0.000    6.518    0.000 {built-in method scipy.fft._pocketfft.pypocketfft.r2c}
+    68339    4.685    0.000    4.685    0.000 {built-in method scipy.fft._pocketfft.pypocketfft.c2r}
+145203373    3.698    0.000    3.698    0.000 {method 'random' of '_random.Random' objects}
+145269589    3.036    0.000    3.036    0.000 {method 'append' of 'list' objects}
+   204574    1.073    0.000    1.073    0.000 {method 'astype' of 'numpy.ndarray' objects}
+  2401211    0.596    0.000    0.596    0.000 {method 'copy' of 'numpy.ndarray' objects}
+    68339    0.574    0.000   14.954    0.000 _signaltools.py:460(_freq_domain_conv)
+   205017    0.490    0.000    0.799    0.000 helper.py:117(_fix_shape)
+   273356    0.402    0.000    1.141    0.000 helper.py:46(_init_nd_shape_and_axes)
+   136814    0.310    0.000    0.310    0.000 {built-in method numpy.zeros}
+    67896    0.271    0.000   17.200    0.000 lns_sa.py:494(_convolve_forbidden)
+    22632    0.230    0.000    0.328    0.000 lns_sa.py:640(_ceiling_window_ok)
+   136678    0.217    0.000    8.543    0.000 basic.py:157(r2cn)
+      272    0.209    0.001    0.210    0.001 {built-in method io.open}
+   205017    0.191    0.000   14.139    0.000 _basic_backend.py:41(_execute_nD)
+    68339    0.177    0.000   16.049    0.000 _signaltools.py:558(fftconvolve)
+   205017    0.161    0.000    0.240    0.000 helper.py:85(_asfarray)
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+cProfile — cumulative time in FFT path
+────────────────────────────────────────────────────────────────────────────────────────────────────
+Sun Apr 26 04:02:44 2026    traces/lns_profile.pstats
+
+         895563622 function calls in 451.758 seconds
+
+   Ordered by: cumulative time
+   List reduced from 207 to 18 due to restriction <'fftconvolve|pocketfft|signaltools|_convolve_forbidden'>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+    67896    0.271    0.000   17.200    0.000 lns_sa.py:494(_convolve_forbidden)
+    68339    0.177    0.000   16.049    0.000 _signaltools.py:558(fftconvolve)
+    68339    0.574    0.000   14.954    0.000 _signaltools.py:460(_freq_domain_conv)
+   136678    6.518    0.000    6.518    0.000 {built-in method scipy.fft._pocketfft.pypocketfft.r2c}
+    68339    4.685    0.000    4.685    0.000 {built-in method scipy.fft._pocketfft.pypocketfft.c2r}
+    68339    0.067    0.000    0.531    0.000 _signaltools.py:520(_apply_conv_mode)
+    68339    0.081    0.000    0.362    0.000 _signaltools.py:399(_init_freq_conv_axes)
+    68339    0.160    0.000    0.245    0.000 _signaltools.py:389(_centered)
+    68339    0.048    0.000    0.108    0.000 _signaltools.py:58(_inputs_swap_needed)
+    68339    0.039    0.000    0.039    0.000 _signaltools.py:498(<listcomp>)
+    68339    0.029    0.000    0.029    0.000 _signaltools.py:395(<listcomp>)
+   205017    0.018    0.000    0.018    0.000 _signaltools.py:82(<genexpr>)
+    68339    0.017    0.000    0.017    0.000 _signaltools.py:442(<listcomp>)
+    68339    0.017    0.000    0.017    0.000 _signaltools.py:550(<listcomp>)
+    68339    0.017    0.000    0.017    0.000 _signaltools.py:668(<listcomp>)
+    68339    0.016    0.000    0.016    0.000 _signaltools.py:514(<listcomp>)
+   136750    0.014    0.000    0.014    0.000 _signaltools.py:83(<genexpr>)
+    68339    0.010    0.000    0.010    0.000 _signaltools.py:447(<genexpr>)
+
+
+
+Tip: interactive exploration → snakeviz traces/lns_profile.pstats
+     or: python -m pstats traces/lns_profile.pstats

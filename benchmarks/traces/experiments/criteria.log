@@ -1,0 +1,213 @@
+
+==============================================================================
+▶  [criteria] Per-criterion benchmark (benchmark_criteria.py)
+   cmd: /Users/algofe/HACKUPC-2026/.venv/bin/python3 benchmark_criteria.py Cases
+   log: traces/experiments/criteria.log
+==============================================================================
+=== Greedy criteria benchmark ===
+Cases:     17
+Criteria:  eff×width, loads/$
+Budget:    whole=4.0s regional=4.0s per run
+
+--- Case0 ---
+  baseline (all 2 criteria)...
+    Q=1951.24  cov=68.8%  bays=17  t=4.86s  winner=whole
+  solo 'eff×width'...
+    Q=1951.24 (Δ=+0.00)  cov=68.8%  bays=17  t=4.60s  winner=whole
+  solo 'loads/$'...
+    Q=1951.24 (Δ=+0.00)  cov=68.8%  bays=17  t=4.56s  winner=whole
+  → best solo criterion: 'eff×width' with Q=1951.24
+
+--- Case1 ---
+  baseline (all 2 criteria)...
+    Q=1340.03  cov=79.2%  bays=24  t=2.54s  winner=whole
+  solo 'eff×width'...
+    Q=1340.03 (Δ=+0.00)  cov=79.2%  bays=24  t=2.32s  winner=whole
+  solo 'loads/$'...
+    Q=1340.03 (Δ=+0.00)  cov=79.2%  bays=24  t=2.33s  winner=whole
+  → best solo criterion: 'eff×width' with Q=1340.03
+
+--- Case10_donut ---
+  baseline (all 2 criteria)...
+    Q=2534.48  cov=72.6%  bays=36  t=5.14s  winner=regional
+  solo 'eff×width'...
+    Q=2534.48 (Δ=+0.00)  cov=72.6%  bays=36  t=4.90s  winner=regional
+  solo 'loads/$'...
+    Q=2534.48 (Δ=+0.00)  cov=72.6%  bays=36  t=4.90s  winner=regional
+  → best solo criterion: 'eff×width' with Q=2534.48
+
+--- Case11 ---
+  baseline (all 2 criteria)...
+    Q=489.80  cov=86.4%  bays=60  t=4.52s  winner=whole
+  solo 'eff×width'...
+    Q=489.80 (Δ=+0.00)  cov=86.4%  bays=60  t=4.07s  winner=whole
+  solo 'loads/$'...
+    Q=489.80 (Δ=+0.00)  cov=86.4%  bays=60  t=4.09s  winner=whole
+  → best solo criterion: 'eff×width' with Q=489.80
+
+--- Case12 ---
+  baseline (all 2 criteria)...
+    Q=789.64  cov=83.5%  bays=88  t=7.40s  winner=whole
+  solo 'eff×width'...
+    Q=789.64 (Δ=+0.00)  cov=83.5%  bays=88  t=7.40s  winner=whole
+  solo 'loads/$'...
+    Q=789.64 (Δ=+0.00)  cov=83.5%  bays=88  t=7.40s  winner=whole
+  → best solo criterion: 'eff×width' with Q=789.64
+
+--- Case13 ---
+  baseline (all 2 criteria)...
+    Q=679.26  cov=85.8%  bays=76  t=7.40s  winner=whole
+  solo 'eff×width'...
+    Q=679.26 (Δ=+0.00)  cov=85.8%  bays=76  t=7.40s  winner=whole
+  solo 'loads/$'...
+    Q=679.26 (Δ=+0.00)  cov=85.8%  bays=76  t=7.40s  winner=whole
+  → best solo criterion: 'eff×width' with Q=679.26
+
+--- Case14 ---
+  baseline (all 2 criteria)...
+    Q=835.60  cov=81.4%  bays=84  t=7.40s  winner=regional
+  solo 'eff×width'...
+    Q=835.60 (Δ=+0.00)  cov=81.4%  bays=84  t=7.40s  winner=regional
+  solo 'loads/$'...
+    Q=835.60 (Δ=+0.00)  cov=81.4%  bays=84  t=7.40s  winner=regional
+  → best solo criterion: 'eff×width' with Q=835.60
+
+--- Case15_mega ---
+  baseline (all 2 criteria)...
+    Q=8658.78  cov=46.7%  bays=640  t=8.02s  winner=whole
+  solo 'eff×width'...
+    Q=8658.78 (Δ=+0.00)  cov=46.7%  bays=640  t=7.24s  winner=whole
+  solo 'loads/$'...
+    Q=8658.78 (Δ=+0.00)  cov=46.7%  bays=640  t=7.23s  winner=whole
+  → best solo criterion: 'eff×width' with Q=8658.78
+
+--- Case2 ---
+  baseline (all 2 criteria)...
+    Q=2551.22  cov=69.0%  bays=20  t=3.41s  winner=whole
+  solo 'eff×width'...
+    Q=2551.22 (Δ=+0.00)  cov=69.0%  bays=20  t=3.33s  winner=whole
+  solo 'loads/$'...
+    Q=2551.22 (Δ=+0.00)  cov=69.0%  bays=20  t=3.29s  winner=whole
+  → best solo criterion: 'eff×width' with Q=2551.22
+
+--- Case3 ---
+  baseline (all 2 criteria)...
+    Q=2679.39  cov=66.6%  bays=48  t=7.40s  winner=regional
+  solo 'eff×width'...
+    Q=2679.39 (Δ=+0.00)  cov=66.6%  bays=48  t=7.40s  winner=regional
+  solo 'loads/$'...
+    Q=2679.39 (Δ=+0.00)  cov=66.6%  bays=48  t=7.40s  winner=regional
+  → best solo criterion: 'eff×width' with Q=2679.39
+
+--- Case4_T_shape ---
+  baseline (all 2 criteria)...
+    Q=2273.38  cov=74.6%  bays=30  t=4.11s  winner=whole
+  solo 'eff×width'...
+    Q=2273.38 (Δ=+0.00)  cov=74.6%  bays=30  t=3.86s  winner=whole
+  solo 'loads/$'...
+    Q=2273.38 (Δ=+0.00)  cov=74.6%  bays=30  t=3.82s  winner=whole
+  → best solo criterion: 'eff×width' with Q=2273.38
+
+--- Case5_U_shape ---
+  baseline (all 2 criteria)...
+    Q=2396.66  cov=73.2%  bays=23  t=3.50s  winner=whole
+  solo 'eff×width'...
+    Q=2396.66 (Δ=+0.00)  cov=73.2%  bays=23  t=3.31s  winner=whole
+  solo 'loads/$'...
+    Q=2396.66 (Δ=+0.00)  cov=73.2%  bays=23  t=3.30s  winner=whole
+  → best solo criterion: 'eff×width' with Q=2396.66
+
+--- Case6_obstacle_field ---
+  baseline (all 2 criteria)...
+    Q=3178.62  cov=68.8%  bays=27  t=6.76s  winner=whole
+  solo 'eff×width'...
+    Q=3178.62 (Δ=+0.00)  cov=68.8%  bays=27  t=6.48s  winner=whole
+  solo 'loads/$'...
+    Q=3178.62 (Δ=+0.00)  cov=68.8%  bays=27  t=6.62s  winner=whole
+  → best solo criterion: 'eff×width' with Q=3178.62
+
+--- Case7_variable_ceiling ---
+  baseline (all 2 criteria)...
+    Q=608.19  cov=87.5%  bays=49  t=4.13s  winner=whole
+  solo 'eff×width'...
+    Q=608.19 (Δ=+0.00)  cov=87.5%  bays=49  t=3.70s  winner=whole
+  solo 'loads/$'...
+    Q=608.19 (Δ=+0.00)  cov=87.5%  bays=49  t=3.63s  winner=whole
+  → best solo criterion: 'eff×width' with Q=608.19
+
+--- Case8_corridor ---
+  baseline (all 2 criteria)...
+    Q=2928.25  cov=69.9%  bays=21  t=5.96s  winner=whole
+  solo 'eff×width'...
+    Q=2928.25 (Δ=+0.00)  cov=69.9%  bays=21  t=5.93s  winner=whole
+  solo 'loads/$'...
+    Q=2928.25 (Δ=+0.00)  cov=69.9%  bays=21  t=5.93s  winner=whole
+  → best solo criterion: 'eff×width' with Q=2928.25
+
+--- Case9_complex ---
+  baseline (all 2 criteria)...
+    Q=2011.92  cov=71.4%  bays=70  t=7.40s  winner=whole
+  solo 'eff×width'...
+    Q=2011.92 (Δ=+0.00)  cov=71.4%  bays=70  t=7.40s  winner=whole
+  solo 'loads/$'...
+    Q=2011.92 (Δ=+0.00)  cov=71.4%  bays=70  t=7.40s  winner=whole
+  → best solo criterion: 'eff×width' with Q=2011.92
+
+--- Case_Teixis ---
+  baseline (all 2 criteria)...
+    Q=1489.86  cov=62.1%  bays=300  t=7.40s  winner=whole
+  solo 'eff×width'...
+    Q=1489.86 (Δ=+0.00)  cov=62.1%  bays=300  t=7.40s  winner=whole
+  solo 'loads/$'...
+    Q=1489.86 (Δ=+0.00)  cov=62.1%  bays=300  t=7.40s  winner=whole
+  → best solo criterion: 'eff×width' with Q=1489.86
+
+Wrote traces/criteria_benchmark.csv
+
+========================================================================
+SUMMARY
+========================================================================
+
+Best solo criterion per case (Q lower is better):
+  case                         baseline_Q    best_solo      criterion         ΔQ     ΔQ %
+  Case0                           1951.24      1951.24      eff×width      +0.00   +0.00%
+  Case1                           1340.03      1340.03      eff×width      +0.00   +0.00%
+  Case10_donut                    2534.48      2534.48      eff×width      +0.00   +0.00%
+  Case11                           489.80       489.80      eff×width      +0.00   +0.00%
+  Case12                           789.64       789.64      eff×width      +0.00   +0.00%
+  Case13                           679.26       679.26      eff×width      +0.00   +0.00%
+  Case14                           835.60       835.60      eff×width      +0.00   +0.00%
+  Case15_mega                     8658.78      8658.78      eff×width      +0.00   +0.00%
+  Case2                           2551.22      2551.22      eff×width      +0.00   +0.00%
+  Case3                           2679.39      2679.39      eff×width      +0.00   +0.00%
+  Case4_T_shape                   2273.38      2273.38      eff×width      +0.00   +0.00%
+  Case5_U_shape                   2396.66      2396.66      eff×width      +0.00   +0.00%
+  Case6_obstacle_field            3178.62      3178.62      eff×width      +0.00   +0.00%
+  Case7_variable_ceiling           608.19       608.19      eff×width      +0.00   +0.00%
+  Case8_corridor                  2928.25      2928.25      eff×width      +0.00   +0.00%
+  Case9_complex                   2011.92      2011.92      eff×width      +0.00   +0.00%
+  Case_Teixis                     1489.86      1489.86      eff×width      +0.00   +0.00%
+
+Times each criterion is the sole-best for a case:
+     eff×width  17  #################
+       loads/$   0  
+
+Criteria that produce Q within 1% of best-solo-Q for each case:
+     criterion    tight(≤1%)    loose(≤5%)
+     eff×width            17            17
+       loads/$            17            17
+
+Criteria candidates to drop:
+  No case within 1% : []
+  No case within 5% : []
+
+Estimated time savings (whole-warehouse path scales linearly with N criteria):
+  Baseline total time across all cases: 97.34s
+  Of which whole-warehouse:            49.13s (~24.56s per criterion)
+  Drop tight-safe []: saves ~0.00s (0.0%)
+  Drop loose-safe []: saves ~0.00s (0.0%)
+
+Total benchmark wall time: 285.8s
+Wrote traces/criteria_benchmark.log
+
+[criteria] done in 285.95s  exit=0

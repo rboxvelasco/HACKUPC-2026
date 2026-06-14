@@ -1,0 +1,67 @@
+
+==============================================================================
+▶  [compare] Greedy vs complex solver (compare_solvers.py)
+   cmd: /Users/algofe/HACKUPC-2026/.venv/bin/python3 compare_solvers.py Cases solutions
+   log: traces/experiments/compare.log
+==============================================================================
+
+========================================================================================
+Case       Solver        N     Cov            Q     Time       ΔQ vs best
+----------------------------------------------------------------------------------------
+Case0      complex      26  66.2%      3349.13    1.88s           +71.6%
+Case0      greedy       17  68.8%      1951.24    4.95s           ★ best
+
+Case1      complex      24  79.2%      1340.03    1.86s           ★ best
+Case1      greedy       24  79.2%      1340.03    2.79s           ★ best
+
+Case10_donut complex      36  70.9%      2831.01    1.99s           +11.7%
+Case10_donut greedy       36  72.6%      2534.48    5.35s           ★ best
+
+Case11     complex      81  90.0%       533.28    2.46s            +8.9%
+Case11     greedy       60  86.4%       489.80    4.69s           ★ best
+
+Case12     complex      88  83.5%       789.64    2.53s           ★ best
+Case12     greedy       88  83.5%       789.64    7.55s           ★ best
+
+Case13     complex      66  76.0%      1176.84    2.24s           +73.3%
+Case13     greedy       76  85.8%       679.26    7.56s           ★ best
+
+Case14     complex      63  74.7%      1002.30    2.61s           +19.9%
+Case14     greedy       84  81.4%       835.60    7.67s           ★ best
+
+Case15_mega complex     161  37.6%     10857.18    5.71s           +25.4%
+Case15_mega greedy      640  46.7%      8658.78    7.80s           ★ best
+
+Case2      complex      20  69.0%      2551.22    1.92s           ★ best
+Case2      greedy       20  69.0%      2551.22    3.38s           ★ best
+
+Case3      complex      44  62.6%      3327.66    2.75s           +24.2%
+Case3      greedy       48  66.6%      2679.39    7.64s           ★ best
+
+Case4_T_shape complex      30  74.6%      2273.38    2.05s           ★ best
+Case4_T_shape greedy       30  74.6%      2273.38    3.99s           ★ best
+
+Case5_U_shape complex      21  65.2%      3939.50    1.34s           +64.4%
+Case5_U_shape greedy       23  73.2%      2396.66    3.35s           ★ best
+
+Case6_obstacle_field complex      27  68.8%      3178.62    1.86s           ★ best
+Case6_obstacle_field greedy       27  68.8%      3178.62    6.53s           ★ best
+
+Case7_variable_ceiling complex      49  87.5%       608.19    1.95s           ★ best
+Case7_variable_ceiling greedy       49  87.5%       608.19    3.87s           ★ best
+
+Case8_corridor complex      21  69.9%      2928.25    1.86s           ★ best
+Case8_corridor greedy       21  69.9%      2928.25    5.93s           ★ best
+
+Case9_complex complex      70  71.4%      2011.92    2.26s           ★ best
+Case9_complex greedy       70  71.4%      2011.92    7.57s           ★ best
+
+Case_Teixis complex     300  62.1%      1489.86    3.03s           ★ best
+Case_Teixis greedy      300  62.1%      1489.86    7.57s           ★ best
+
+----------------------------------------------------------------------------------------
+TOTAL      complex                 Σ=  44188.01   40.29s
+TOTAL      greedy                  Σ=  37396.32   98.19s
+========================================================================================
+
+[compare] done in 138.57s  exit=0
