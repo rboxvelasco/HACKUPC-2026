@@ -182,7 +182,7 @@ def generate_html(
         compare_mode=compare_mode,
     )
 
-    with open(output_html, 'w') as f:
+    with open(output_html, 'w', encoding="utf-8") as f:
         f.write(html)
     print(f"Visualization written to {output_html}")
 
