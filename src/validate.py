@@ -8,7 +8,7 @@ import sys
 import os
 from shapely.geometry import Polygon, box
 
-from solver import (
+from src.core.solver import (
     parse_warehouse, parse_obstacles, parse_ceiling, parse_bay_types,
     PlacedBay, compute_score, usable_area,
 )
