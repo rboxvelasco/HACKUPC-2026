@@ -34,7 +34,7 @@ We used a greedy algorithm that evaluates several criteria and picks the most fa
 
 To operate on the full state nimbly, we went with a bitmap-based representation, which lets us carry out every operation via bitmasks and standard **computer-vision** techniques, simplifying how the overall state is handled. Additionally, within LNS, the region to destroy and rebuild is selected via **convolutions** that identify areas with higher or lower shelf density, thereby guiding the solution-improvement process.
 
-Refer to [`Algorithm Rationale.md`](docs/Algorithm_Rationale.md) for a more detailed explanation of the algorithms and modeling decisions.
+Refer to [`Algorithm_Rationale.md`](docs/Algorithm_Rationale.md) for a more detailed explanation of the algorithms and modeling decisions.
 
 After the solution is generated, a viewer is created and saved in [`solutions/`](solutions/). You can currently see a few example solutions there.
 
@@ -84,7 +84,7 @@ The pipeline writes CSVs and HTMLs to `solutions/` by default and opens the comp
 
 ```bash
 pip install -r requirements.txt
-python3 -m src.core.pipeline Cases/Case0
+python3 -m src.core.pipeline Cases/your-case
 ```
 
 For more execution options, you can see [`pipeline.py`](src/core/pipeline.py) header.
